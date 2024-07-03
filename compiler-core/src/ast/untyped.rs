@@ -248,7 +248,7 @@ impl HasLocation for UntypedExpr {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Use {
+pub struct UntypedUse {
     /// This is the expression with the untyped/typed code of the use callback
     /// function.
     ///

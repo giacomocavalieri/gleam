@@ -1,5 +1,7 @@
 use std::{iter, sync::Arc};
 
+mod desugar_use;
+
 use crate::{
     ast::{self, visit::Visit as _, SrcSpan},
     build,

@@ -600,3 +600,59 @@ impl crate::bit_array::GetLiteralValue for TypedExpr {
         None
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TypedUse {
+    pub typ: Arc<Type>,
+
+    /// This is the expression with the untyped/typed code of the use callback
+    /// function.
+    ///
+    pub call: Box<TypedExpr>,
+
+    /// This is the location of the whole use line, starting from the `use`
+    /// keyword and ending with the function call on the right hand side of
+    /// `<-`.
+    ///
+    /// ```gleam
+    /// use a <- reult.try(result)
+    /// ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    /// ```
+    ///
+    pub location: SrcSpan,
+
+    /// This is the SrcSpan of the patterns you find on the left hand side of
+    /// `<-` in a use expression.
+    ///
+    /// ```gleam
+    /// use pattern1, pattern2 <- todo
+    ///     ^^^^^^^^^^^^^^^^^^
+    /// ```
+    ///
+    /// In case there's no patterns it will be corresponding to the SrcSpan of
+    /// the `use` keyword itself.
+    ///
+    pub assignments_location: SrcSpan,
+
+    /// The patterns on the left hand side of `<-` in a use expression.
+    ///
+    pub assignments: Vec<TypedUseAssignment>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TypedUseAssignment {
+    pub location: SrcSpan,
+    pub pattern: TypedPattern,
+}
+
+impl HasLocation for TypedUse {
+    fn location(&self) -> SrcSpan {
+        self.location
+    }
+}
+
+impl HasType for TypedUse {
+    fn type_(&self) -> Arc<Type> {
+        self.typ.clone()
+    }
+}

@@ -48,7 +48,7 @@ use crate::type_::Type;
 use super::{
     BinOp, BitArrayOption, Definition, SrcSpan, Statement, TypeAst, TypedArg, TypedAssignment,
     TypedClause, TypedDefinition, TypedExpr, TypedExprBitArraySegment, TypedFunction, TypedModule,
-    TypedRecordUpdateArg, TypedStatement, Use,
+    TypedRecordUpdateArg, TypedStatement, TypedUse,
 };
 
 pub trait Visit<'ast> {
@@ -289,8 +289,8 @@ pub trait Visit<'ast> {
         visit_typed_assignment(self, assignment);
     }
 
-    fn visit_use(&mut self, use_: &'ast Use) {
-        visit_use(self, use_);
+    fn visit_typed_use(&mut self, use_: &'ast TypedUse) {
+        visit_typed_use(self, use_);
     }
 
     fn visit_typed_call_arg(&mut self, arg: &'ast TypedCallArg) {
@@ -749,7 +749,7 @@ where
     match stmt {
         Statement::Expression(expr) => v.visit_typed_expr(expr),
         Statement::Assignment(assignment) => v.visit_typed_assignment(assignment),
-        Statement::Use(use_) => v.visit_use(use_),
+        Statement::Use(use_) => v.visit_typed_use(use_),
     }
 }
 
@@ -760,7 +760,7 @@ where
     v.visit_typed_expr(&assignment.value);
 }
 
-pub fn visit_use<'a, V>(_v: &mut V, _use_: &'a Use)
+pub fn visit_typed_use<'a, V>(_v: &mut V, _use_: &'a TypedUse)
 where
     V: Visit<'a> + ?Sized,
 {

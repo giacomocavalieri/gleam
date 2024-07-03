@@ -10,7 +10,7 @@ use crate::{
         UntypedConstant, UntypedConstantBitArraySegment, UntypedCustomType, UntypedDefinition,
         UntypedExpr, UntypedExprBitArraySegment, UntypedFunction, UntypedImport, UntypedModule,
         UntypedModuleConstant, UntypedPattern, UntypedPatternBitArraySegment,
-        UntypedRecordUpdateArg, UntypedStatement, UntypedTypeAlias, Use, UseAssignment,
+        UntypedRecordUpdateArg, UntypedStatement, UntypedTypeAlias, UntypedUse, UseAssignment,
     },
     build::Target,
 };
@@ -598,7 +598,7 @@ pub trait UntypedExprFolder: TypeAstFolder + UntypedConstantFolder + PatternFold
                 })
             }
 
-            Statement::Use(Use {
+            Statement::Use(UntypedUse {
                 location,
                 assignments_location,
                 call,
@@ -613,7 +613,7 @@ pub trait UntypedExprFolder: TypeAstFolder + UntypedConstantFolder + PatternFold
                     })
                     .collect();
                 let call = Box::new(self.fold_expr(*call));
-                Statement::Use(Use {
+                Statement::Use(UntypedUse {
                     location,
                     assignments_location,
                     call,
@@ -826,7 +826,7 @@ pub trait UntypedExprFolder: TypeAstFolder + UntypedConstantFolder + PatternFold
         assignment
     }
 
-    fn fold_use(&mut self, use_: Use) -> Use {
+    fn fold_use(&mut self, use_: UntypedUse) -> UntypedUse {
         use_
     }
 }

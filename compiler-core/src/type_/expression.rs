@@ -7,8 +7,8 @@ use crate::{
         TodoKind, TypeAst, TypedArg, TypedAssignment, TypedClause, TypedClauseGuard, TypedConstant,
         TypedExpr, TypedMultiPattern, TypedStatement, UntypedArg, UntypedAssignment, UntypedClause,
         UntypedClauseGuard, UntypedConstant, UntypedConstantBitArraySegment, UntypedExpr,
-        UntypedExprBitArraySegment, UntypedMultiPattern, UntypedStatement, Use, UseAssignment,
-        USE_ASSIGNMENT_VARIABLE,
+        UntypedExprBitArraySegment, UntypedMultiPattern, UntypedStatement, UntypedUse,
+        UseAssignment, USE_ASSIGNMENT_VARIABLE,
     },
     build::Target,
     exhaustiveness,
@@ -605,7 +605,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
     fn infer_use(
         &mut self,
-        use_: Use,
+        use_: UntypedUse,
         sequence_location: SrcSpan,
         mut following_expressions: Vec<UntypedStatement>,
     ) -> Result<TypedStatement, Error> {

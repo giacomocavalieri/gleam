@@ -62,8 +62,8 @@ use crate::ast::{
     RecordUpdateSpread, SrcSpan, Statement, TargetedDefinition, TodoKind, TypeAlias, TypeAst,
     TypeAstConstructor, TypeAstFn, TypeAstHole, TypeAstTuple, TypeAstVar, UnqualifiedImport,
     UntypedArg, UntypedClause, UntypedClauseGuard, UntypedConstant, UntypedDefinition, UntypedExpr,
-    UntypedModule, UntypedPattern, UntypedRecordUpdateArg, UntypedStatement, Use, UseAssignment,
-    CAPTURE_VARIABLE,
+    UntypedModule, UntypedPattern, UntypedRecordUpdateArg, UntypedStatement, UntypedUse,
+    UseAssignment, CAPTURE_VARIABLE,
 };
 use crate::build::Target;
 use crate::parse::extra::ModuleExtra;
@@ -856,7 +856,7 @@ where
             (_, _) => SrcSpan { start, end },
         };
 
-        Ok(Statement::Use(Use {
+        Ok(Statement::Use(UntypedUse {
             location: SrcSpan::new(start, call.location().end),
             assignments_location,
             assignments,

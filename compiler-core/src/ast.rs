@@ -6,8 +6,8 @@ mod untyped;
 mod tests;
 pub mod visit;
 
-pub use self::typed::TypedExpr;
-pub use self::untyped::{UntypedExpr, Use};
+pub use self::typed::{TypedExpr, TypedUse};
+pub use self::untyped::{UntypedExpr, UntypedUse};
 
 pub use self::constant::{Constant, TypedConstant, UntypedConstant};
 
@@ -464,12 +464,12 @@ impl Publicity {
 /// // Private function
 /// fn foo(x: Int) -> Int { ... }
 /// ```
-pub struct Function<T, Expr> {
+pub struct Function<T, Expr, Use> {
     pub location: SrcSpan,
     pub end_position: u32,
     pub name: EcoString,
     pub arguments: Vec<Arg<T>>,
-    pub body: Vec1<Statement<T, Expr>>,
+    pub body: Vec1<Statement<T, Expr, Use>>,
     pub publicity: Publicity,
     pub deprecation: Deprecation,
     pub return_annotation: Option<TypeAst>,
@@ -480,10 +480,10 @@ pub struct Function<T, Expr> {
     pub implementations: Implementations,
 }
 
-pub type TypedFunction = Function<Arc<Type>, TypedExpr>;
-pub type UntypedFunction = Function<(), UntypedExpr>;
+pub type TypedFunction = Function<Arc<Type>, TypedExpr, TypedUse>;
+pub type UntypedFunction = Function<(), UntypedExpr, UntypedUse>;
 
-impl<T, E> Function<T, E> {
+impl<T, E, U> Function<T, E, U> {
     fn full_location(&self) -> SrcSpan {
         SrcSpan::new(self.location.start, self.end_position)
     }
@@ -614,12 +614,12 @@ pub struct TypeAlias<T> {
     pub deprecation: Deprecation,
 }
 
-pub type TypedDefinition = Definition<Arc<Type>, TypedExpr, EcoString, EcoString>;
-pub type UntypedDefinition = Definition<(), UntypedExpr, (), ()>;
+pub type TypedDefinition = Definition<Arc<Type>, TypedExpr, TypedUse, EcoString, EcoString>;
+pub type UntypedDefinition = Definition<(), UntypedExpr, UntypedUse, (), ()>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Definition<T, Expr, ConstantRecordTag, PackageName> {
-    Function(Function<T, Expr>),
+pub enum Definition<T, Expr, Use, ConstantRecordTag, PackageName> {
+    Function(Function<T, Expr, Use>),
 
     TypeAlias(TypeAlias<T>),
 
@@ -789,7 +789,7 @@ impl TypedDefinition {
     }
 }
 
-impl<A, B, C, E> Definition<A, B, C, E> {
+impl<A, B, C, D, E> Definition<A, B, C, D, E> {
     pub fn location(&self) -> SrcSpan {
         match self {
             Definition::Function(Function { location, .. })
@@ -1925,19 +1925,19 @@ impl GroupedStatements {
 
 /// A statement with in a function body.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Statement<TypeT, ExpressionT> {
+pub enum Statement<TypeT, ExpressionT, UseT> {
     /// A bare expression that is not assigned to any variable.
     Expression(ExpressionT),
     /// Assigning an expression to variables using a pattern.
     Assignment(Assignment<TypeT, ExpressionT>),
     /// A `use` expression.
-    Use(Use),
+    Use(UseT),
 }
 
-pub type TypedStatement = Statement<Arc<Type>, TypedExpr>;
-pub type UntypedStatement = Statement<(), UntypedExpr>;
+pub type TypedStatement = Statement<Arc<Type>, TypedExpr, TypedUse>;
+pub type UntypedStatement = Statement<(), UntypedExpr, UntypedUse>;
 
-impl<T, E> Statement<T, E> {
+impl<T, E, U> Statement<T, E, U> {
     /// Returns `true` if the statement is [`Expression`].
     ///
     /// [`Expression`]: Statement::Expression
