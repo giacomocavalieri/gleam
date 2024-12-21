@@ -3959,3 +3959,27 @@ fn extract_variable_in_block() {
         find_position_of("2").select_until(find_position_of("3"))
     );
 }
+
+#[test]
+fn do_not_extract_top_level_expression_statement() {
+    assert_no_code_actions!(
+        EXTRACT_VARIABLE,
+        r#"pub fn main() {
+    1
+}
+"#,
+        find_position_of("1").to_selection()
+    );
+}
+
+#[test]
+fn do_not_extract_top_level_expression_in_let_statement() {
+    assert_no_code_actions!(
+        EXTRACT_VARIABLE,
+        r#"pub fn main() {
+    let a = 1
+}
+"#,
+        find_position_of("1").to_selection()
+    );
+}
