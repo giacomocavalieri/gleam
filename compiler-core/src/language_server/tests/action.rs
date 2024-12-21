@@ -3983,3 +3983,18 @@ fn do_not_extract_top_level_expression_in_let_statement() {
         find_position_of("1").to_selection()
     );
 }
+
+#[test]
+fn do_not_extract_top_level_module_call() {
+    let src = r#"
+import list
+pub fn main() {
+  list.map([1, 2, 3], todo)
+}"#;
+
+    assert_no_code_actions!(
+        EXTRACT_VARIABLE,
+        TestProject::for_source(src).add_module("list", "pub fn map(l, f) { todo }"),
+        find_position_of("map").to_selection()
+    );
+}
