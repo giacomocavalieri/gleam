@@ -35,10 +35,12 @@ export function main() {
   if (a.constructor$ === ctor) {
     let a$1 = a;
     return undefined;
-  } else if (a instanceof Thing && (ctor === a.constructor$)) {
-    let constructor = a.constructor$;
-    return undefined;
   } else {
-    return undefined;
+    if (ctor === a.constructor) {
+      let constructor = a.constructor;
+      return undefined;
+    } else {
+      return undefined;
+    }
   }
 }

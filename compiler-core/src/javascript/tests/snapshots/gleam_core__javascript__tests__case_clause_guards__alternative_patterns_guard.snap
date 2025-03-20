@@ -13,13 +13,27 @@ pub fn main(xs) -> Int {
 
 ----- COMPILED JAVASCRIPT
 export function main(xs) {
-  if (xs.hasLength(1) && (xs.head === 1)) {
-    let x = xs.head;
-    return x;
-  } else if (xs.hasLength(2) && (xs.tail.head === 1)) {
-    let x = xs.tail.head;
-    return x;
-  } else {
+  if (xs.hasLength(0)) {
     return 0;
+  } else {
+    if (xs.tail.hasLength(0)) {
+      if (xs.head === 1) {
+        let x = xs.head;
+        return x;
+      } else {
+        return 0;
+      }
+    } else {
+      if (xs.tail.tail.hasLength(0)) {
+        if (xs.tail.head === 1) {
+          let x = xs.tail.head;
+          return x;
+        } else {
+          return 0;
+        }
+      } else {
+        return 0;
+      }
+    }
   }
 }

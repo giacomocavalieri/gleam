@@ -1,5 +1,19 @@
 use crate::assert_js;
 
+#[test]
+fn tuple_and_guard() {
+    assert_js!(
+        r#"
+fn go(x) {
+  case #(1, 2) {
+    #(1, a) if a == 2 -> 1
+    #(_, _) -> 2
+  }
+}
+"#,
+    )
+}
+
 // https://github.com/gleam-lang/gleam/issues/1187
 #[test]
 fn pointless() {
@@ -294,7 +308,7 @@ fn deeply_nested_string_prefix_assignment() {
         r#"
 type Wibble {
   Wibble(Wobble)
-}            
+}
 type Wobble {
   Wobble(wabble: Wabble)
 }

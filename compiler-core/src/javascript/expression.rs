@@ -88,7 +88,7 @@ pub(crate) struct Generator<'module, 'ast> {
     line_numbers: &'module LineNumbers,
     function_name: Option<EcoString>,
     function_arguments: Vec<Option<&'module EcoString>>,
-    current_scope_vars: im::HashMap<EcoString, usize>,
+    pub current_scope_vars: im::HashMap<EcoString, usize>,
     pub function_position: Position,
     pub scope_position: Position,
     // We register whether these features are used within an expression so that
@@ -251,8 +251,17 @@ impl<'module, 'a> Generator<'module, 'a> {
             TypedExpr::TupleIndex { tuple, index, .. } => self.tuple_index(tuple, *index),
 
             TypedExpr::Case {
-                subjects, clauses, ..
-            } => self.case(subjects, clauses),
+                subjects,
+                clauses,
+                compiled_case,
+                ..
+            } => {
+                let clauses = clauses
+                    .iter()
+                    .map(|clause| (&clause.then, clause.guard.as_ref()))
+                    .collect_vec();
+                decision::print(compiled_case, clauses, subjects, self)
+            }
 
             TypedExpr::Call { fun, args, .. } => self.call(fun, args),
             TypedExpr::Fn { args, body, .. } => self.fn_(args, body),
@@ -725,7 +734,7 @@ impl<'module, 'a> Generator<'module, 'a> {
         Ok(documents.to_doc().force_break())
     }
 
-    fn expression_flattening_blocks(&mut self, expression: &'a TypedExpr) -> Output<'a> {
+    pub(crate) fn expression_flattening_blocks(&mut self, expression: &'a TypedExpr) -> Output<'a> {
         match expression {
             TypedExpr::Block { statements, .. } => self.statements(statements),
             _ => self.expression(expression),
@@ -837,7 +846,9 @@ impl<'module, 'a> Generator<'module, 'a> {
         }
 
         // Otherwise we need to compile the patterns
+        //
         let (subject, subject_assignment) = pattern::assign_subject(self, value);
+        let subject = subject.to_doc();
         // Value needs to be rendered before traversing pattern to have correctly incremented variables.
         let value =
             self.not_in_tail_position(Some(Ordering::Loose), |this| this.wrap_expression(value))?;
@@ -850,7 +861,9 @@ impl<'module, 'a> Generator<'module, 'a> {
             docvec![
                 line(),
                 "return ",
-                subject_assignment.clone().unwrap_or_else(|| value.clone()),
+                subject_assignment
+                    .clone()
+                    .map_or_else(|| value.clone(), |s| s.to_doc()),
                 ";"
             ]
         } else {
@@ -867,111 +880,6 @@ impl<'module, 'a> Generator<'module, 'a> {
         };
 
         Ok(doc.append(afterwards).force_break())
-    }
-
-    fn case(&mut self, subject_values: &'a [TypedExpr], clauses: &'a [TypedClause]) -> Output<'a> {
-        let (subjects, subject_assignments): (Vec<_>, Vec<_>) =
-            pattern::assign_subjects(self, subject_values)
-                .into_iter()
-                .unzip();
-        let mut generator = pattern::Generator::new(self);
-
-        let mut doc = nil();
-
-        // We wish to be able to know whether this is the first or clause being
-        // processed, so record the index number. We use this instead of
-        // `Iterator.enumerate` because we are using a nested for loop.
-        let mut clause_number = 0;
-        let total_patterns: usize = clauses
-            .iter()
-            .map(|c| c.alternative_patterns.len())
-            .sum::<usize>()
-            + clauses.len();
-
-        // A case has many clauses `pattern -> consequence`
-        for clause in clauses {
-            let multipattern = std::iter::once(&clause.pattern);
-            let multipatterns = multipattern.chain(&clause.alternative_patterns);
-
-            // A clause can have many patterns `pattern, pattern ->...`
-            for multipatterns in multipatterns {
-                let scope = generator.expression_generator.current_scope_vars.clone();
-                let mut compiled =
-                    generator.generate(&subjects, multipatterns, clause.guard.as_ref())?;
-                let consequence = generator
-                    .expression_generator
-                    .expression_flattening_blocks(&clause.then)?;
-
-                // We've seen one more clause
-                clause_number += 1;
-
-                // Reset the scope now that this clause has finished, causing the
-                // variables to go out of scope.
-                generator.expression_generator.current_scope_vars = scope;
-
-                // If the pattern assigns any variables we need to render assignments
-                let body = if compiled.has_assignments() {
-                    let assignments = generator
-                        .expression_generator
-                        .pattern_take_assignments_doc(&mut compiled);
-                    docvec![assignments, line(), consequence]
-                } else {
-                    consequence
-                };
-
-                let is_final_clause = clause_number == total_patterns;
-                let is_first_clause = clause_number == 1;
-                let is_only_clause = is_final_clause && is_first_clause;
-
-                doc = if is_only_clause {
-                    // If this is the only clause and there are no checks then we can
-                    // render just the body as the case does nothing
-                    // A block is used as it could declare variables still.
-                    doc.append("{")
-                        .append(docvec![line(), body].nest(INDENT))
-                        .append(line())
-                        .append("}")
-                } else if is_final_clause {
-                    // If this is the final clause and there are no checks then we can
-                    // render `else` instead of `else if (...)`
-                    doc.append(" else {")
-                        .append(docvec![line(), body].nest(INDENT))
-                        .append(line())
-                        .append("}")
-                } else {
-                    doc.append(if is_first_clause {
-                        "if ("
-                    } else {
-                        " else if ("
-                    })
-                    .append(
-                        generator
-                            .expression_generator
-                            .pattern_take_checks_doc(&mut compiled, true),
-                    )
-                    .append(") {")
-                    .append(docvec![line(), body].nest(INDENT))
-                    .append(line())
-                    .append("}")
-                };
-            }
-        }
-
-        // If there is a subject name given create a variable to hold it for
-        // use in patterns
-        let subject_assignments: Vec<_> = subject_assignments
-            .into_iter()
-            .zip(subject_values)
-            .flat_map(|(assignment_name, value)| assignment_name.map(|name| (name, value)))
-            .map(|(name, value)| {
-                let value = self.not_in_tail_position(Some(Ordering::Strict), |this| {
-                    this.wrap_expression(value)
-                })?;
-                Ok(docvec!["let ", name, " = ", value, ";", line()])
-            })
-            .try_collect()?;
-
-        Ok(docvec![subject_assignments, doc].force_break())
     }
 
     fn assignment_no_match(
@@ -1397,23 +1305,6 @@ impl<'module, 'a> Generator<'module, 'a> {
         join(assignments, line())
     }
 
-    fn pattern_take_assignments_doc(
-        &self,
-        compiled_pattern: &mut CompiledPattern<'a>,
-    ) -> Document<'a> {
-        let assignments = std::mem::take(&mut compiled_pattern.assignments);
-        Self::pattern_assignments_doc(assignments)
-    }
-
-    fn pattern_take_checks_doc(
-        &self,
-        compiled_pattern: &mut CompiledPattern<'a>,
-        match_desired: bool,
-    ) -> Document<'a> {
-        let checks = std::mem::take(&mut compiled_pattern.checks);
-        self.pattern_checks_doc(checks, match_desired)
-    }
-
     fn pattern_checks_doc(
         &self,
         checks: Vec<pattern::Check<'a>>,
@@ -1512,91 +1403,6 @@ pub fn float(value: &str) -> Document<'_> {
     out.push_str(value);
 
     out.to_doc()
-}
-
-pub(crate) fn guard_constant_expression<'a>(
-    assignments: &mut Vec<Assignment<'a>>,
-    tracker: &mut UsageTracker,
-    expression: &'a TypedConstant,
-) -> Output<'a> {
-    match expression {
-        Constant::Tuple { elements, .. } => array(
-            elements
-                .iter()
-                .map(|element| guard_constant_expression(assignments, tracker, element)),
-        ),
-
-        Constant::List { elements, .. } => {
-            tracker.list_used = true;
-            list(
-                elements
-                    .iter()
-                    .map(|element| guard_constant_expression(assignments, tracker, element)),
-            )
-        }
-        Constant::Record { type_, name, .. } if type_.is_bool() && name == "True" => {
-            Ok("true".to_doc())
-        }
-        Constant::Record { type_, name, .. } if type_.is_bool() && name == "False" => {
-            Ok("false".to_doc())
-        }
-        Constant::Record { type_, .. } if type_.is_nil() => Ok("undefined".to_doc()),
-
-        Constant::Record {
-            args,
-            module,
-            name,
-            tag,
-            type_,
-            ..
-        } => {
-            if type_.is_result() {
-                if tag == "Ok" {
-                    tracker.ok_used = true;
-                } else {
-                    tracker.error_used = true;
-                }
-            }
-
-            // If there's no arguments and the type is a function that takes
-            // arguments then this is the constructor being referenced, not the
-            // function being called.
-            if let Some(arity) = type_.fn_arity() {
-                if args.is_empty() && arity != 0 {
-                    let arity = arity as u16;
-                    return Ok(record_constructor(
-                        type_.clone(),
-                        None,
-                        name,
-                        arity,
-                        tracker,
-                    ));
-                }
-            }
-
-            let field_values: Vec<_> = args
-                .iter()
-                .map(|arg| guard_constant_expression(assignments, tracker, &arg.value))
-                .try_collect()?;
-            Ok(construct_record(
-                module.as_ref().map(|(module, _)| module.as_str()),
-                name,
-                field_values,
-            ))
-        }
-
-        Constant::BitArray { segments, .. } => bit_array(tracker, segments, |tracker, constant| {
-            guard_constant_expression(assignments, tracker, constant)
-        }),
-
-        Constant::Var { name, .. } => Ok(assignments
-            .iter()
-            .find(|assignment| assignment.name == name)
-            .map(|assignment| assignment.subject.clone())
-            .unwrap_or_else(|| maybe_escape_identifier(name).to_doc())),
-
-        expression => constant_expression(Context::Function, tracker, expression),
-    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1728,7 +1534,7 @@ pub(crate) fn constant_expression<'a>(
     }
 }
 
-fn bit_array<'a>(
+pub(crate) fn bit_array<'a>(
     tracker: &mut UsageTracker,
     segments: &'a [TypedConstantBitArraySegment],
     mut constant_expr_fun: impl FnMut(&mut UsageTracker, &'a TypedConstant) -> Output<'a>,
@@ -1930,7 +1736,17 @@ pub fn string(value: &str) -> Document<'_> {
     }
 }
 
-pub fn array<'a, Elements: IntoIterator<Item = Output<'a>>>(elements: Elements) -> Output<'a> {
+pub fn string_from_eco<'a>(value: EcoString) -> Document<'a> {
+    if value.contains('\n') {
+        value.replace("\n", r"\n").to_doc().surround("\"", "\"")
+    } else {
+        value.to_doc().surround("\"", "\"")
+    }
+}
+
+pub(crate) fn array<'a, Elements: IntoIterator<Item = Output<'a>>>(
+    elements: Elements,
+) -> Output<'a> {
     let elements = Itertools::intersperse(elements.into_iter(), Ok(break_(",", ", ")))
         .collect::<Result<Vec<_>, _>>()?;
     if elements.is_empty() {
@@ -1947,7 +1763,7 @@ pub fn array<'a, Elements: IntoIterator<Item = Output<'a>>>(elements: Elements) 
     }
 }
 
-fn list<'a, I: IntoIterator<Item = Output<'a>>>(elements: I) -> Output<'a>
+pub(crate) fn list<'a, I: IntoIterator<Item = Output<'a>>>(elements: I) -> Output<'a>
 where
     I::IntoIter: DoubleEndedIterator + ExactSizeIterator,
 {
@@ -1981,7 +1797,7 @@ fn call_arguments<'a, Elements: IntoIterator<Item = Output<'a>>>(elements: Eleme
     .group())
 }
 
-fn construct_record<'a>(
+pub(crate) fn construct_record<'a>(
     module: Option<&'a str>,
     name: &'a str,
     arguments: impl IntoIterator<Item = Document<'a>>,
@@ -2116,7 +1932,7 @@ fn immediately_invoked_function_expression_document(document: Document<'_>) -> D
     .group()
 }
 
-fn record_constructor<'a>(
+pub(crate) fn record_constructor<'a>(
     type_: Arc<Type>,
     qualifier: Option<&'a str>,
     name: &'a str,
