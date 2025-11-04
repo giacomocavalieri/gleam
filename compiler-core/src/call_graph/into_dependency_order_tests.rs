@@ -646,6 +646,20 @@ fn duplicate_function_name() {
 
 #[test]
 fn more_complex_cycle() {
+    // These functions form the following dependency graph:
+    //
+    // ```
+    //    a1 <--> a2
+    //    ^       |
+    //    |       v
+    //     ----- a3
+    // ```
+    //
+    // We actaully have two possible cycles: `a1 <--> a2`, or
+    // `a1 -> a2 -> a3 -> a1`. We want to make sure we're always picking the
+    // biggest possible cycle to compile all mutually recursive functions into a
+    // single loop.
+    //
     let functions = [
         ("a1", [].as_slice(), r#"{ a2 }"#),
         ("a2", [].as_slice(), r#"{ a3 a1 }"#),
@@ -653,7 +667,7 @@ fn more_complex_cycle() {
     ];
     assert_eq!(
         parse_and_order(functions.as_slice(), [].as_slice()).unwrap(),
-        vec![vec!["a2", "a1"], vec!["a3"]]
+        vec![vec!["a2", "a3", "a1"]]
     );
 }
 
