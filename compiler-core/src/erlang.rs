@@ -89,8 +89,7 @@ impl<'env> Env<'env> {
 
 pub fn records(module: &TypedModule) -> Vec<(&str, String)> {
     module
-        .definitions
-        .iter()
+        .all_definitions()
         .filter_map(|definition| match definition {
             Definition::CustomType(CustomType {
                 publicity: Publicity::Public,
@@ -173,7 +172,7 @@ fn module_document<'a>(
     // would result in an error as it tries to reference this private function.
     let overridden_publicity = find_private_functions_referenced_in_importable_constants(module);
 
-    for definition in &module.definitions {
+    for definition in module.all_definitions() {
         register_imports_and_exports(
             definition,
             &mut exports,
@@ -228,8 +227,8 @@ fn module_document<'a>(
 
     let mut needs_function_docs = false;
     let mut echo_used = false;
-    let mut statements = Vec::with_capacity(module.definitions.len());
-    for definition in module.definitions.iter() {
+    let mut statements = Vec::with_capacity(module.count_definitions());
+    for definition in module.all_definitions() {
         if let Some((statement_document, env)) = module_statement(
             definition,
             &module.name,
@@ -3223,7 +3222,7 @@ fn find_private_functions_referenced_in_importable_constants(
 ) -> im::HashSet<EcoString> {
     let mut overridden_publicity = im::HashSet::new();
 
-    for definition in module.definitions.iter() {
+    for definition in module.all_definitions() {
         if let Definition::ModuleConstant(constant) = definition
             && constant.publicity.is_importable()
         {

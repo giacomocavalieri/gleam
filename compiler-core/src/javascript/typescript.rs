@@ -196,8 +196,7 @@ impl<'a> TypeScriptGenerator<'a> {
         let mut imports = self.collect_imports();
         let statements = self
             .module
-            .definitions
-            .iter()
+            .all_definitions()
             .flat_map(|definition| self.definition(definition, &mut imports));
 
         // Two lines between each statement
@@ -230,7 +229,7 @@ impl<'a> TypeScriptGenerator<'a> {
     fn collect_imports(&mut self) -> Imports<'a> {
         let mut imports = Imports::new();
 
-        for statement in &self.module.definitions {
+        for statement in self.module.all_definitions() {
             match statement {
                 Definition::Function(Function {
                     arguments,

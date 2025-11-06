@@ -56,7 +56,7 @@ pub struct Module<Info, Definitions> {
     pub name: EcoString,
     pub documentation: Vec<EcoString>,
     pub type_info: Info,
-    pub definitions: Vec<Definitions>,
+    pub definition_groups: Vec<Vec<Definitions>>,
     pub names: Names,
     /// The source byte locations of definition that are unused.
     /// This is used in code generation to know when definitions can be safely omitted.
@@ -67,18 +67,37 @@ impl<Info, Definitions> Module<Info, Definitions> {
     pub fn erlang_name(&self) -> EcoString {
         module_erlang_name(&self.name)
     }
+
+    pub fn count_definitions(&self) -> usize {
+        self.definition_groups.iter().map(|group| group.len()).sum()
+    }
+
+    /// Returns an iterator yielding all the definitions in this module.
+    /// This is useful when in need of iterating over all definitions
+    /// irrespective of groups; in all other cases you might want to access the
+    /// `definition_groups` instead.
+    ///
+    pub fn all_definitions(&self) -> impl Iterator<Item = &Definitions> {
+        self.definition_groups.iter().flatten()
+    }
+
+    pub fn all_definitions_mut(&mut self) -> impl Iterator<Item = &mut Definitions> {
+        self.definition_groups.iter_mut().flatten()
+    }
+
+    pub fn into_all_definitions(self) -> impl Iterator<Item = Definitions> {
+        self.definition_groups.into_iter().flatten()
+    }
 }
 
 impl TypedModule {
     pub fn find_node(&self, byte_index: u32) -> Option<Located<'_>> {
-        self.definitions
-            .iter()
+        self.all_definitions()
             .find_map(|definition| definition.find_node(byte_index))
     }
 
     pub fn find_statement(&self, byte_index: u32) -> Option<&TypedStatement> {
-        self.definitions
-            .iter()
+        self.all_definitions()
             .find_map(|definition| definition.find_statement(byte_index))
     }
 }
@@ -118,15 +137,13 @@ impl UntypedModule {
     }
 
     pub fn iter_definitions(&self, target: Target) -> impl Iterator<Item = &UntypedDefinition> {
-        self.definitions
-            .iter()
+        self.all_definitions()
             .filter(move |definition| definition.is_for(target))
             .map(|definition| &definition.definition)
     }
 
     pub fn into_iter_definitions(self, target: Target) -> impl Iterator<Item = UntypedDefinition> {
-        self.definitions
-            .into_iter()
+        self.into_all_definitions()
             .filter(move |definition| definition.is_for(target))
             .map(|definition| definition.definition)
     }

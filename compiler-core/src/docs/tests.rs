@@ -190,8 +190,7 @@ fn compile_documentation(
     printer.set_options(options);
 
     let types = module
-        .definitions
-        .iter()
+        .all_definitions()
         .filter_map(
             |definition: &crate::ast::Definition<
                 std::sync::Arc<type_::Type>,
@@ -204,8 +203,7 @@ fn compile_documentation(
         .collect_vec();
 
     let values = module
-        .definitions
-        .iter()
+        .all_definitions()
         .filter_map(|definition| printer.value(&source_links, definition))
         .sorted()
         .collect_vec();

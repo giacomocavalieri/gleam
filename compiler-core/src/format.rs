@@ -212,8 +212,7 @@ impl<'comments> Formatter<'comments> {
         // Here we take consecutive groups of imports so that they can be sorted
         // alphabetically.
         for (is_import_group, definitions) in &module
-            .definitions
-            .iter()
+            .all_definitions()
             .chunk_by(|definition| definition.definition.is_import())
         {
             if is_import_group {

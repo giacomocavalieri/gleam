@@ -148,10 +148,15 @@ pub fn module(
 ) -> TypedModule {
     let mut inliner = Inliner::new(modules);
 
-    module.definitions = module
-        .definitions
+    module.definition_groups = module
+        .definition_groups
         .into_iter()
-        .map(|definition| inliner.definition(definition))
+        .map(|definition_group| {
+            definition_group
+                .into_iter()
+                .map(|definition| inliner.definition(definition))
+                .collect()
+        })
         .collect();
     module
 }

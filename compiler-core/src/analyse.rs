@@ -162,6 +162,8 @@ impl<A> ModuleAnalyzerConstructor<'_, A> {
         line_numbers: LineNumbers,
         src_path: Utf8PathBuf,
     ) -> Outcome<TypedModule, Vec1<Error>> {
+        let definitions_count = module.count_definitions();
+
         ModuleAnalyzer {
             target: self.target,
             ids: self.ids,
@@ -175,8 +177,8 @@ impl<A> ModuleAnalyzerConstructor<'_, A> {
             line_numbers,
             src_path,
             problems: Problems::new(),
-            value_names: HashMap::with_capacity(module.definitions.len()),
-            hydrators: HashMap::with_capacity(module.definitions.len()),
+            value_names: HashMap::with_capacity(definitions_count),
+            hydrators: HashMap::with_capacity(definitions_count),
             module_name: module.name.clone(),
             inline_functions: HashMap::new(),
             minimum_required_version: Version::new(0, 1, 0),
@@ -353,7 +355,7 @@ impl<'a, A> ModuleAnalyzer<'a, A> {
         let module = ast::Module {
             documentation: documentation.clone(),
             name: self.module_name.clone(),
-            definitions: typed_definitions,
+            definition_groups: typed_definitions,
             names: type_names,
             unused_definition_positions,
             type_info: ModuleInterface {
