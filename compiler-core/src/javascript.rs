@@ -113,8 +113,7 @@ impl<'a> Generator<'a> {
         // Generate JavaScript code for each statement
         let statements = self.collect_definitions().into_iter().chain(
             self.module
-                .definitions
-                .iter()
+                .all_definitions()
                 .flat_map(|definition| self.definition(definition)),
         );
 
@@ -608,8 +607,7 @@ impl<'a> Generator<'a> {
 
     fn collect_definitions(&mut self) -> Vec<Document<'a>> {
         self.module
-            .definitions
-            .iter()
+            .all_definitions()
             .flat_map(|definition| match definition {
                 // If a custom type is unused then we don't need to generate code for it
                 Definition::CustomType(CustomType { location, .. })
@@ -640,7 +638,7 @@ impl<'a> Generator<'a> {
     fn collect_imports(&mut self) -> Imports<'a> {
         let mut imports = Imports::new();
 
-        for definition in &self.module.definitions {
+        for definition in self.module.all_definitions() {
             match definition {
                 Definition::Import(Import {
                     module,
@@ -850,7 +848,7 @@ impl<'a> Generator<'a> {
     }
 
     fn register_module_definitions_in_scope(&mut self) {
-        for definition in self.module.definitions.iter() {
+        for definition in self.module.all_definitions() {
             match definition {
                 Definition::ModuleConstant(ModuleConstant { name, .. }) => {
                     self.register_in_scope(name)

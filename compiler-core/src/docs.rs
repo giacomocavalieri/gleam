@@ -214,16 +214,14 @@ pub fn generate_html<IO: FileSystemReader>(
 
         let types: Vec<TypeDefinition<'_>> = module
             .ast
-            .definitions
-            .iter()
+            .all_definitions()
             .filter_map(|definition| printer.type_definition(&source_links, definition))
             .sorted()
             .collect();
 
         let values: Vec<DocsValues<'_>> = module
             .ast
-            .definitions
-            .iter()
+            .all_definitions()
             .filter_map(|definition| printer.value(&source_links, definition))
             .sorted()
             .collect();

@@ -151,7 +151,12 @@ pub fn module(
     module.definitions = module
         .definitions
         .into_iter()
-        .map(|definition| inliner.definition(definition))
+        .map(|definitions_group| {
+            definitions_group
+                .into_iter()
+                .map(|definition| inliner.definition(definition))
+                .collect()
+        })
         .collect();
     module
 }

@@ -1427,7 +1427,7 @@ impl<'a, IO> QualifiedToUnqualifiedImportFirstPass<'a, IO> {
     ) -> Option<&'a Import<EcoString>> {
         let mut matching_import = None;
 
-        for definition in &self.module.ast.definitions {
+        for definition in self.module.ast.all_definitions() {
             let ast::Definition::Import(import) = definition else {
                 continue;
             };
@@ -1836,6 +1836,7 @@ impl<'a> UnqualifiedToQualifiedImportFirstPass<'a> {
                 .ast
                 .definitions
                 .iter()
+                .flatten()
                 .find_map(|definition| match definition {
                     ast::Definition::Import(import) if import.module == *module_name => import
                         .unqualified_values
@@ -1858,6 +1859,7 @@ impl<'a> UnqualifiedToQualifiedImportFirstPass<'a> {
                 .ast
                 .definitions
                 .iter()
+                .flatten()
                 .find_map(|definition| match definition {
                     ast::Definition::Import(import) => {
                         if let Some(ty) = import
@@ -2839,6 +2841,7 @@ impl<'ast> ast::visit::Visit<'ast> for ExtractVariable<'ast> {
             .ast
             .definitions
             .iter()
+            .flatten()
             .for_each(|def| match def {
                 ast::Definition::ModuleConstant(constant) => {
                     self.name_generator.add_used_name(constant.name.clone());
@@ -3196,6 +3199,7 @@ fn can_be_constant(
             .ast
             .definitions
             .iter()
+            .flatten()
             .filter_map(|definition| match definition {
                 ast::Definition::ModuleConstant(module_constant) => Some(&module_constant.name),
 
@@ -3310,6 +3314,7 @@ fn generate_new_name_for_constant(module: &Module, expr: &TypedExpr) -> EcoStrin
             .ast
             .definitions
             .iter()
+            .flatten()
             .filter_map(|definition| match definition {
                 ast::Definition::ModuleConstant(constant) => Some(constant.name.clone()),
                 ast::Definition::Function(function) => function.name.as_ref().map(|n| n.1.clone()),
@@ -5799,7 +5804,7 @@ impl<'a, IO> GenerateVariant<'a, IO> {
         let (module_name, type_name, _) = custom_type.named_type_information()?;
         let module = self.compiler.modules.get(&module_name)?;
         let (end_position, type_braces) =
-            (module.ast.definitions.iter()).find_map(|definition| match definition {
+            (module.ast.all_definitions()).find_map(|definition| match definition {
                 ast::Definition::CustomType(custom_type) if custom_type.name == type_name => {
                     // If there's already a variant with this name then we definitely
                     // don't want to generate a new variant with the same name!
@@ -7773,6 +7778,7 @@ impl<'ast> ast::visit::Visit<'ast> for RemoveUnusedImports<'ast> {
         self.imports = module
             .definitions
             .iter()
+            .flatten()
             .filter_map(|definition| match definition {
                 ast::Definition::Import(import) => Some(import),
                 _ => None,

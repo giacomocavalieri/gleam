@@ -269,7 +269,7 @@ fn alias_references_in_module(
         };
 
         let mut import = None;
-        for definition in module.ast.definitions.iter() {
+        for definition in module.ast.all_definitions() {
             match definition {
                 Definition::Import(this_import) if this_import.module == *module_name => {
                     import = Some(this_import);

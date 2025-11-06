@@ -142,13 +142,15 @@ fn check_for_name_squatting(package: &Package) -> Result<(), Error> {
         return Ok(());
     }
 
-    let definitions = &module.ast.definitions;
-
-    if definitions.len() > 2 {
+    if module.ast.count_definitions() > 2 {
         return Ok(());
     }
 
-    let Some(main) = definitions.iter().find_map(|d| d.main_function()) else {
+    let Some(main) = module
+        .ast
+        .all_definitions()
+        .find_map(|definition| definition.main_function())
+    else {
         return Ok(());
     };
 
@@ -169,8 +171,8 @@ fn check_for_default_main(package: &Package) -> Result<(), Error> {
     let has_default_main = package
         .modules
         .iter()
-        .flat_map(|m| m.ast.definitions.iter())
-        .filter_map(|d| d.main_function())
+        .flat_map(|module| module.ast.all_definitions())
+        .filter_map(|definition| definition.main_function())
         .any(|main| main.documentation.is_none() && is_default_main(main, package_name));
 
     if has_default_main {

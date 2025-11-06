@@ -232,8 +232,8 @@ impl<'a, A> ModuleAnalyzer<'a, A> {
         }
         .build();
 
+        let groups_count = module.definitions.len();
         let definitions = GroupedDefinitions::new(module.into_iter_definitions(self.target));
-        let definitions_count = definitions.len();
 
         // Register any modules, types, and values being imported
         // We process imports first so that anything imported can be referenced
@@ -261,18 +261,15 @@ impl<'a, A> ModuleAnalyzer<'a, A> {
         }
 
         // Infer the types of each statement in the module
-        let mut typed_definitions = Vec::with_capacity(definitions_count);
+        let mut typed_groups = Vec::with_capacity(groups_count);
         for import in definitions.imports {
-            optionally_push(&mut typed_definitions, self.analyse_import(import, &env));
+            optionally_push_group(&mut typed_groups, self.analyse_import(import, &env));
         }
         for type_ in definitions.custom_types {
-            optionally_push(
-                &mut typed_definitions,
-                self.analyse_custom_type(type_, &mut env),
-            );
+            optionally_push_group(&mut typed_groups, self.analyse_custom_type(type_, &mut env));
         }
         for type_alias in definitions.type_aliases {
-            typed_definitions.push(analyse_type_alias(type_alias, &mut env));
+            typed_groups.push(vec![analyse_type_alias(type_alias, &mut env)]);
         }
 
         // Sort functions and constants into dependency order for inference.
@@ -284,7 +281,6 @@ impl<'a, A> ModuleAnalyzer<'a, A> {
                 Err(error) => return self.all_errors(error),
             };
         let mut working_group = vec![];
-
         for group in definition_groups {
             // A group may have multiple functions that depend on each other
             // through mutual recursion.
@@ -300,13 +296,12 @@ impl<'a, A> ModuleAnalyzer<'a, A> {
             }
 
             // Now that the entire group has been inferred, generalise their types.
-            for inferred in working_group.drain(..) {
-                typed_definitions.push(generalise_definition(
-                    inferred,
-                    &self.module_name,
-                    &mut env,
-                ));
-            }
+            let typed_group = working_group
+                .drain(..)
+                .map(|definition| generalise_definition(definition, &self.module_name, &mut env))
+                .collect_vec();
+
+            typed_groups.push(typed_group);
         }
 
         // Generate warnings for unused items
@@ -353,7 +348,7 @@ impl<'a, A> ModuleAnalyzer<'a, A> {
         let module = ast::Module {
             documentation: documentation.clone(),
             name: self.module_name.clone(),
-            definitions: typed_definitions,
+            definitions: typed_groups,
             names: type_names,
             unused_definition_positions,
             type_info: ModuleInterface {
@@ -1660,9 +1655,9 @@ impl<'a, A> ModuleAnalyzer<'a, A> {
     }
 }
 
-fn optionally_push<T>(vector: &mut Vec<T>, item: Option<T>) {
+fn optionally_push_group<T>(vector: &mut Vec<Vec<T>>, item: Option<T>) {
     if let Some(item) = item {
-        vector.push(item)
+        vector.push(vec![item])
     }
 }
 

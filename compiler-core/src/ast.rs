@@ -47,16 +47,16 @@ pub trait HasLocation {
     fn location(&self) -> SrcSpan;
 }
 
-pub type TypedModule = Module<type_::ModuleInterface, TypedDefinition>;
+pub type TypedModule = Module<type_::ModuleInterface, Vec<Vec<TypedDefinition>>>;
 
-pub type UntypedModule = Module<(), TargetedDefinition>;
+pub type UntypedModule = Module<(), Vec<TargetedDefinition>>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Module<Info, Definitions> {
     pub name: EcoString,
     pub documentation: Vec<EcoString>,
     pub type_info: Info,
-    pub definitions: Vec<Definitions>,
+    pub definitions: Definitions,
     pub names: Names,
     /// The source byte locations of definition that are unused.
     /// This is used in code generation to know when definitions can be safely omitted.
@@ -71,15 +71,37 @@ impl<Info, Definitions> Module<Info, Definitions> {
 
 impl TypedModule {
     pub fn find_node(&self, byte_index: u32) -> Option<Located<'_>> {
-        self.definitions
-            .iter()
-            .find_map(|definition| definition.find_node(byte_index))
+        self.definitions.iter().find_map(|definitions_group| {
+            definitions_group
+                .iter()
+                .find_map(|definition| definition.find_node(byte_index))
+        })
     }
 
     pub fn find_statement(&self, byte_index: u32) -> Option<&TypedStatement> {
+        self.definitions.iter().find_map(|definitions_group| {
+            definitions_group
+                .iter()
+                .find_map(|definition| definition.find_statement(byte_index))
+        })
+    }
+
+    /// Returns an iterator that yields all the typed definitions in the module
+    /// regardless of groups.
+    ///
+    pub fn all_definitions(&self) -> impl Iterator<Item = &TypedDefinition> {
+        self.definitions.iter().flatten()
+    }
+
+    pub(crate) fn all_definitions_mut(&mut self) -> impl Iterator<Item = &mut TypedDefinition> {
+        self.definitions.iter_mut().flatten()
+    }
+
+    pub fn count_definitions(&self) -> usize {
         self.definitions
             .iter()
-            .find_map(|definition| definition.find_statement(byte_index))
+            .map(|definitions_group| definitions_group.len())
+            .sum()
     }
 }
 
@@ -827,6 +849,8 @@ impl<T> CustomType<T> {
 }
 
 pub type UntypedTypeAlias = TypeAlias<()>;
+
+pub type TypedTypeAlias = TypeAlias<Arc<Type>>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// A new name for an existing type

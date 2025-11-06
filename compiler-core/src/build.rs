@@ -274,7 +274,7 @@ impl Module {
 
         // Order definitions to avoid misassociating doc comments after the
         // order has changed during compilation.
-        let mut definitions: Vec<_> = self.ast.definitions.iter_mut().collect();
+        let mut definitions: Vec<_> = self.ast.all_definitions_mut().collect();
         definitions.sort_by(|a, b| a.location().start.cmp(&b.location().start));
 
         // Doc Comments

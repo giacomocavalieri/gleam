@@ -239,7 +239,7 @@ impl<'a, IO> Completer<'a, IO> {
         let mut already_imported_values = std::collections::HashSet::new();
 
         // Search the ast for import statements
-        for import in self.module.ast.definitions.iter().filter_map(get_import) {
+        for import in self.module.ast.all_definitions().filter_map(get_import) {
             // Find the import that matches the module being imported from
             if import.module == module_being_imported_from.name {
                 // Add the values and types that have already been imported
@@ -427,7 +427,7 @@ impl<'a, IO> Completer<'a, IO> {
         }
 
         // Imported modules
-        for import in self.module.ast.definitions.iter().filter_map(get_import) {
+        for import in self.module.ast.all_definitions().filter_map(get_import) {
             // The module may not be known of yet if it has not previously
             // compiled yet in this editor session.
             let Some(module) = self.compiler.get_module_interface(&import.module) else {
@@ -556,8 +556,7 @@ impl<'a, IO> Completer<'a, IO> {
             if let Some(function) =
                 self.module
                     .ast
-                    .definitions
-                    .iter()
+                    .all_definitions()
                     .find_map(|definition| match definition {
                         Definition::Function(function)
                             if function.full_location().contains(cursor) =>
@@ -622,7 +621,7 @@ impl<'a, IO> Completer<'a, IO> {
         }
 
         // Imported modules
-        for import in self.module.ast.definitions.iter().filter_map(get_import) {
+        for import in self.module.ast.all_definitions().filter_map(get_import) {
             // The module may not be known of yet if it has not previously
             // compiled yet in this editor session.
             let Some(module) = self.compiler.get_module_interface(&import.module) else {
