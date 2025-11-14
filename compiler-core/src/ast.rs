@@ -47,7 +47,7 @@ pub trait HasLocation {
     fn location(&self) -> SrcSpan;
 }
 
-pub type TypedModule = Module<type_::ModuleInterface, Vec<Vec<TypedDefinition>>>;
+pub type TypedModule = Module<type_::ModuleInterface, TypedDefinitions>;
 
 pub type UntypedModule = Module<(), Vec<TargetedDefinition>>;
 
@@ -71,37 +71,65 @@ impl<Info, Definitions> Module<Info, Definitions> {
 
 impl TypedModule {
     pub fn find_node(&self, byte_index: u32) -> Option<Located<'_>> {
-        self.definitions.iter().find_map(|definitions_group| {
-            definitions_group
-                .iter()
-                .find_map(|definition| definition.find_node(byte_index))
-        })
+        let TypedDefinitions {
+            functions,
+            constants,
+            custom_types,
+            imports,
+            type_aliases,
+        } = self.definitions;
+
+        imports
+            .iter()
+            .find_map(|import| import.find_node(byte_index))
+            .or_else(|| (constants.iter()).find_map(|constant| constant.find_node(byte_index)))
+            .or_else(|| (type_aliases.iter()).find_map(|alias| alias.find_node(byte_index)))
+            .or_else(|| (custom_types.iter()).find_map(|type_| type_.find_node(byte_index)))
+            .or_else(|| {
+                (functions.iter().flatten()).find_map(|function| function.find_node(byte_index))
+            })
     }
 
     pub fn find_statement(&self, byte_index: u32) -> Option<&TypedStatement> {
-        self.definitions.iter().find_map(|definitions_group| {
-            definitions_group
-                .iter()
-                .find_map(|definition| definition.find_statement(byte_index))
-        })
-    }
+        let TypedDefinitions {
+            functions,
+            constants,
+            custom_types,
+            imports,
+            type_aliases,
+        } = self.definitions;
 
-    /// Returns an iterator that yields all the typed definitions in the module
-    /// regardless of groups.
-    ///
-    pub fn all_definitions(&self) -> impl Iterator<Item = &TypedDefinition> {
-        self.definitions.iter().flatten()
-    }
-
-    pub(crate) fn all_definitions_mut(&mut self) -> impl Iterator<Item = &mut TypedDefinition> {
-        self.definitions.iter_mut().flatten()
-    }
-
-    pub fn count_definitions(&self) -> usize {
-        self.definitions
+        imports
             .iter()
-            .map(|definitions_group| definitions_group.len())
-            .sum()
+            .find_map(|import| import.find_statement(byte_index))
+            .or_else(|| (constants.iter()).find_map(|constant| constant.find_statement(byte_index)))
+            .or_else(|| (type_aliases.iter()).find_map(|alias| alias.find_statement(byte_index)))
+            .or_else(|| (custom_types.iter()).find_map(|type_| type_.find_statement(byte_index)))
+            .or_else(|| {
+                (functions.iter().flatten())
+                    .find_map(|function| function.find_statement(byte_index))
+            })
+    }
+}
+
+#[derive(Debug)]
+pub struct TypedDefinitions {
+    pub functions: Vec<Vec<TypedFunction>>,
+    pub constants: Vec<TypedModuleConstant>,
+    pub custom_types: Vec<TypedCustomType>,
+    pub imports: Vec<TypedImport>,
+    pub type_aliases: Vec<TypedTypeAlias>,
+}
+
+impl TypedDefinitions {
+    pub fn count_definitions(&self) -> usize {
+        let functions: usize = self.functions.iter().map(|group| group.len()).sum();
+
+        functions
+            + self.constants.len()
+            + self.custom_types.len()
+            + self.imports.len()
+            + self.type_aliases.len()
     }
 }
 
@@ -737,7 +765,61 @@ impl<T, E> Function<T, E> {
     }
 }
 
+impl TypedFunction {
+    fn find_node(&self, byte_index: u32) -> Option<Located<'_>> {
+        // Search for the corresponding node inside the function
+        // only if the index falls within the function's full location.
+        if !self.full_location().contains(byte_index) {
+            return None;
+        }
+
+        if let Some(found) = self
+            .body
+            .iter()
+            .find_map(|statement| statement.find_node(byte_index))
+        {
+            return Some(found);
+        }
+
+        if let Some(found_arg) = self
+            .arguments
+            .iter()
+            .find_map(|arg| arg.find_node(byte_index))
+        {
+            return Some(found_arg);
+        };
+
+        if let Some(found_statement) = self
+            .body
+            .iter()
+            .find(|statement| statement.location().contains(byte_index))
+        {
+            return Some(Located::Statement(found_statement));
+        };
+
+        // Check if location is within the return annotation.
+        if let Some(located) = self
+            .return_annotation
+            .iter()
+            .find_map(|annotation| annotation.find_node(byte_index, self.return_type.clone()))
+        {
+            return Some(located);
+        };
+
+        // Note that the fn `.location` covers the function head, not
+        // the entire statement.
+        if self.location.contains(byte_index) {
+            Some(Located::ModuleStatement(self))
+        } else if self.full_location().contains(byte_index) {
+            Some(Located::FunctionBody(self))
+        } else {
+            None
+        }
+    }
+}
+
 pub type UntypedImport = Import<()>;
+pub type TypedImport = Import<EcoString>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// Import another Gleam module so the current module can use the types and
@@ -901,54 +983,7 @@ impl TypedDefinition {
 
     pub fn find_node(&self, byte_index: u32) -> Option<Located<'_>> {
         match self {
-            Definition::Function(function) => {
-                // Search for the corresponding node inside the function
-                // only if the index falls within the function's full location.
-                if !function.full_location().contains(byte_index) {
-                    return None;
-                }
-
-                if let Some(found) = function
-                    .body
-                    .iter()
-                    .find_map(|statement| statement.find_node(byte_index))
-                {
-                    return Some(found);
-                }
-
-                if let Some(found_arg) = function
-                    .arguments
-                    .iter()
-                    .find_map(|arg| arg.find_node(byte_index))
-                {
-                    return Some(found_arg);
-                };
-
-                if let Some(found_statement) = function
-                    .body
-                    .iter()
-                    .find(|statement| statement.location().contains(byte_index))
-                {
-                    return Some(Located::Statement(found_statement));
-                };
-
-                // Check if location is within the return annotation.
-                if let Some(located) = function.return_annotation.iter().find_map(|annotation| {
-                    annotation.find_node(byte_index, function.return_type.clone())
-                }) {
-                    return Some(located);
-                };
-
-                // Note that the fn `.location` covers the function head, not
-                // the entire statement.
-                if function.location.contains(byte_index) {
-                    Some(Located::ModuleStatement(self))
-                } else if function.full_location().contains(byte_index) {
-                    Some(Located::FunctionBody(function))
-                } else {
-                    None
-                }
-            }
+            Definition::Function(function) => {}
 
             Definition::CustomType(custom) => {
                 // Check if location is within the type of one of the arguments of a constructor.

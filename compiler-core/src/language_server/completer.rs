@@ -13,8 +13,8 @@ use vec1::Vec1;
 use crate::{
     Result,
     ast::{
-        self, Arg, CallArg, Definition, Function, FunctionLiteralKind, Pattern, Publicity,
-        TypedExpr, visit::Visit,
+        self, Arg, CallArg, Function, FunctionLiteralKind, Pattern, Publicity, TypedExpr,
+        visit::Visit,
     },
     build::{Module, Origin},
     line_numbers::LineNumbers,
@@ -28,7 +28,7 @@ use crate::{
 use super::{
     compiler::LspProjectCompiler,
     edits::{
-        Newlines, add_newlines_after_import, get_import, get_import_edit,
+        Newlines, add_newlines_after_import, get_import_edit,
         position_of_first_definition_if_import,
     },
     files::FileSystemProxy,
@@ -239,7 +239,7 @@ impl<'a, IO> Completer<'a, IO> {
         let mut already_imported_values = std::collections::HashSet::new();
 
         // Search the ast for import statements
-        for import in self.module.ast.all_definitions().filter_map(get_import) {
+        for import in &self.module.ast.definitions.imports {
             // Find the import that matches the module being imported from
             if import.module == module_being_imported_from.name {
                 // Add the values and types that have already been imported
@@ -427,7 +427,7 @@ impl<'a, IO> Completer<'a, IO> {
         }
 
         // Imported modules
-        for import in self.module.ast.all_definitions().filter_map(get_import) {
+        for import in &self.module.ast.definitions.imports {
             // The module may not be known of yet if it has not previously
             // compiled yet in this editor session.
             let Some(module) = self.compiler.get_module_interface(&import.module) else {
@@ -553,18 +553,14 @@ impl<'a, IO> Completer<'a, IO> {
 
             // Find the function that the cursor is in and push completions for
             // its arguments and local variables.
-            if let Some(function) =
-                self.module
-                    .ast
-                    .all_definitions()
-                    .find_map(|definition| match definition {
-                        Definition::Function(function)
-                            if function.full_location().contains(cursor) =>
-                        {
-                            Some(function)
-                        }
-                        _ => None,
-                    })
+            if let Some(function) = (self.module.ast.definitions.functions.iter().flatten())
+                .find_map(|function| {
+                    if function.full_location().contains(cursor) {
+                        Some(function)
+                    } else {
+                        None
+                    }
+                })
             {
                 completions.extend(
                     LocalCompletion::new(mod_name, insert_range, cursor).fn_completions(function),
@@ -621,7 +617,7 @@ impl<'a, IO> Completer<'a, IO> {
         }
 
         // Imported modules
-        for import in self.module.ast.all_definitions().filter_map(get_import) {
+        for import in &self.module.ast.definitions.imports {
             // The module may not be known of yet if it has not previously
             // compiled yet in this editor session.
             let Some(module) = self.compiler.get_module_interface(&import.module) else {

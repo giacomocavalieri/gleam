@@ -126,8 +126,8 @@ use crate::{
         self, ArgNames, Assert, AssignName, Assignment, AssignmentKind, BitArrayOption,
         BitArraySegment, BitArraySize, CallArg, Clause, Definition, FunctionLiteralKind, Pattern,
         PipelineAssignmentKind, Publicity, SrcSpan, Statement, TailPattern, TypedArg, TypedAssert,
-        TypedAssignment, TypedBitArraySize, TypedClause, TypedDefinition, TypedExpr,
-        TypedExprBitArraySegment, TypedFunction, TypedModule, TypedPattern,
+        TypedAssignment, TypedBitArraySize, TypedClause, TypedDefinition, TypedDefinitions,
+        TypedExpr, TypedExprBitArraySegment, TypedFunction, TypedModule, TypedPattern,
         TypedPipelineAssignment, TypedStatement, TypedUse, visit::Visit,
     },
     exhaustiveness::{Body, CompiledCase, Decision},
@@ -148,16 +148,22 @@ pub fn module(
 ) -> TypedModule {
     let mut inliner = Inliner::new(modules);
 
-    module.definitions = module
-        .definitions
-        .into_iter()
-        .map(|definitions_group| {
-            definitions_group
-                .into_iter()
-                .map(|definition| inliner.definition(definition))
-                .collect()
-        })
-        .collect();
+    let definitions = TypedDefinitions {
+        constants: module.definitions.constants,
+        custom_types: module.definitions.custom_types,
+        imports: module.definitions.imports,
+        type_aliases: module.definitions.type_aliases,
+        functions: (module.definitions.functions.into_iter())
+            .map(|group| {
+                group
+                    .into_iter()
+                    .map(|function| inliner.function(function))
+                    .collect_vec()
+            })
+            .collect_vec(),
+    };
+
+    module.definitions = definitions;
     module
 }
 

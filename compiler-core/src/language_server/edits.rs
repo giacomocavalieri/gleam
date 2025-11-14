@@ -2,31 +2,41 @@ use ecow::EcoString;
 use lsp_types::{Position, Range, TextEdit};
 
 use crate::{
-    ast::{Definition, Import, SrcSpan, TypedDefinition},
+    ast::{Import, SrcSpan},
     build::Module,
     line_numbers::LineNumbers,
 };
 
 use super::src_span_to_lsp_range;
 
-// Gets the position of the import statement if it's the first definition in the module.
+// Gets the position of the import statement if it's the first definition in the
+// module.
 pub fn position_of_first_definition_if_import(
     module: &Module,
     line_numbers: &LineNumbers,
 ) -> Option<Position> {
-    // As "self.module.ast.definitions"  could be sorted, let's find the actual first definition by position.
-    let first_definition = module
-        .ast
-        .all_definitions()
-        .min_by(|a, b| a.location().start.cmp(&b.location().start));
-    let import = first_definition.and_then(get_import);
-    import.map(|import| src_span_to_lsp_range(import.location, line_numbers).start)
-}
+    // As "self.module.ast.definitions" could be sorted, let's find the actual
+    // first definition by position.
 
-pub fn get_import(statement: &TypedDefinition) -> Option<&Import<EcoString>> {
-    match statement {
-        Definition::Import(import) => Some(import),
-        _ => None,
+    // We first have to find the first import in the module.
+    let first_import = (module.ast.definitions.imports.iter())
+        .min_by(|a, b| a.location.start.cmp(&b.location.start))?;
+
+    // Then we need to make sure that it's actually the very first of all the
+    // definitions in our module.
+    let is_import_first_definition_in_the_module = (module.ast.definitions.constants.iter())
+        .map(|constant| constant.location)
+        .chain((module.ast.definitions.custom_types.iter()).map(|type_| type_.location))
+        .chain(
+            (module.ast.definitions.functions.iter().flatten()).map(|function| function.location),
+        )
+        .chain((module.ast.definitions.type_aliases.iter()).map(|alias| alias.location))
+        .all(|location| location.start.gt(&first_import.location.start));
+
+    if is_import_first_definition_in_the_module {
+        Some(src_span_to_lsp_range(first_import.location, line_numbers).start)
+    } else {
+        None
     }
 }
 

@@ -348,7 +348,7 @@ impl<'a, A> ModuleAnalyzer<'a, A> {
         let module = ast::Module {
             documentation: documentation.clone(),
             name: self.module_name.clone(),
-            definitions: typed_groups,
+            definitions: todo!("typed_groups"),
             names: type_names,
             unused_definition_positions,
             type_info: ModuleInterface {

@@ -8,9 +8,9 @@ use itertools::Itertools;
 
 use crate::{
     ast::{
-        ArgNames, CustomType, Definition, Function, ModuleConstant, Publicity,
-        RecordConstructorArg, SrcSpan, TypeAlias, TypedArg, TypedDefinition,
-        TypedRecordConstructor,
+        ArgNames, CustomType, Function, ModuleConstant, Publicity, RecordConstructorArg, SrcSpan,
+        TypeAlias, TypedArg, TypedCustomType, TypedFunction, TypedModule, TypedModuleConstant,
+        TypedRecordConstructor, TypedTypeAlias,
     },
     docvec,
     pretty::{Document, Documentable, break_, join, line, nil, zero_width_string},
@@ -86,92 +86,104 @@ impl Printer<'_> {
         self.options = options;
     }
 
-    pub fn type_definition<'a>(
+    pub fn custom_type_type_definition<'a>(
         &mut self,
         source_links: &SourceLinker,
-        statement: &'a TypedDefinition,
+        custom_type: &'a TypedCustomType,
     ) -> Option<TypeDefinition<'a>> {
-        match statement {
-            Definition::CustomType(CustomType {
-                publicity: Publicity::Public,
-                location,
-                name,
-                constructors,
-                documentation,
-                deprecation,
-                opaque,
-                parameters,
-                ..
-            }) => Some(TypeDefinition {
-                name,
-                definition: print(self.custom_type(name, parameters, constructors, *opaque)),
-                documentation: markdown_documentation(documentation),
-                text_documentation: text_documentation(documentation),
-                deprecation_message: match deprecation {
-                    Deprecation::NotDeprecated => "".to_string(),
-                    Deprecation::Deprecated { message } => message.to_string(),
-                },
-                constructors: if *opaque {
-                    Vec::new()
-                } else {
-                    constructors
-                        .iter()
-                        .map(|constructor| TypeConstructor {
-                            definition: print(self.record_constructor(constructor)),
-                            documentation: markdown_documentation(&constructor.documentation),
-                            text_documentation: text_documentation(&constructor.documentation),
-                            arguments: constructor
-                                .arguments
-                                .iter()
-                                .filter_map(|arg| arg.label.as_ref().map(|(_, label)| (arg, label)))
-                                .map(|(argument, label)| TypeConstructorArg {
-                                    name: label.trim_end().to_string(),
-                                    doc: markdown_documentation(&argument.doc),
-                                })
-                                .filter(|arg| !arg.doc.is_empty())
-                                .collect(),
-                        })
-                        .collect()
-                },
-                source_url: source_links.url(*location),
-                opaque: *opaque,
-            }),
+        let CustomType {
+            publicity,
+            location,
+            name,
+            constructors,
+            documentation,
+            deprecation,
+            opaque,
+            parameters,
+            ..
+        } = custom_type;
 
-            Definition::TypeAlias(TypeAlias {
-                publicity: Publicity::Public,
-                location,
-                alias: name,
-                parameters,
-                type_,
-                documentation,
-                deprecation,
-                ..
-            }) => Some(TypeDefinition {
-                name,
-                definition: print(self.type_alias(name, type_, parameters).group()),
-                documentation: markdown_documentation(documentation),
-                text_documentation: text_documentation(documentation),
-                constructors: vec![],
-                source_url: source_links.url(*location),
-                deprecation_message: match deprecation {
-                    Deprecation::NotDeprecated => "".to_string(),
-                    Deprecation::Deprecated { message } => message.to_string(),
-                },
-                opaque: false,
-            }),
-
-            Definition::TypeAlias(_)
-            | Definition::CustomType(_)
-            | Definition::Function(_)
-            | Definition::Import(_)
-            | Definition::ModuleConstant(_) => None,
+        match publicity {
+            Publicity::Private | Publicity::Internal { .. } => return None,
+            Publicity::Public => {}
         }
+
+        Some(TypeDefinition {
+            name,
+            definition: print(self.custom_type(name, parameters, constructors, *opaque)),
+            documentation: markdown_documentation(documentation),
+            text_documentation: text_documentation(documentation),
+            deprecation_message: match deprecation {
+                Deprecation::NotDeprecated => "".to_string(),
+                Deprecation::Deprecated { message } => message.to_string(),
+            },
+            constructors: if *opaque {
+                Vec::new()
+            } else {
+                constructors
+                    .iter()
+                    .map(|constructor| TypeConstructor {
+                        definition: print(self.record_constructor(constructor)),
+                        documentation: markdown_documentation(&constructor.documentation),
+                        text_documentation: text_documentation(&constructor.documentation),
+                        arguments: constructor
+                            .arguments
+                            .iter()
+                            .filter_map(|arg| arg.label.as_ref().map(|(_, label)| (arg, label)))
+                            .map(|(argument, label)| TypeConstructorArg {
+                                name: label.trim_end().to_string(),
+                                doc: markdown_documentation(&argument.doc),
+                            })
+                            .filter(|arg| !arg.doc.is_empty())
+                            .collect(),
+                    })
+                    .collect()
+            },
+            source_url: source_links.url(*location),
+            opaque: *opaque,
+        })
     }
 
-    pub fn value<'a>(
+    pub fn type_alias_type_definition<'a>(
         &mut self,
         source_links: &SourceLinker,
-        statement: &'a TypedDefinition,
+        type_alias: &'a TypedTypeAlias,
+    ) -> Option<TypeDefinition<'a>> {
+        let TypeAlias {
+            publicity,
+            location,
+            alias: name,
+            parameters,
+            type_,
+            documentation,
+            deprecation,
+            ..
+        } = type_alias;
+
+        match publicity {
+            Publicity::Private | Publicity::Internal { .. } => return None,
+            Publicity::Public => {}
+        };
+
+        Some(TypeDefinition {
+            name,
+            definition: print(self.type_alias(name, type_, parameters).group()),
+            documentation: markdown_documentation(documentation),
+            text_documentation: text_documentation(documentation),
+            constructors: vec![],
+            source_url: source_links.url(*location),
+            deprecation_message: match deprecation {
+                Deprecation::NotDeprecated => "".to_string(),
+                Deprecation::Deprecated { message } => message.to_string(),
+            },
+            opaque: false,
+        })
+    }
+
+    pub fn module_constant_value<'a>(
+        &mut self,
+        source_links: &SourceLinker,
+        constant: &'a TypedModuleConstant,
     ) -> Option<DocsValues<'a>> {
         // Ensure that any type variables we printed in previous definitions don't
         // affect our printing of this definition. Two type variables in different
@@ -179,54 +191,73 @@ impl Printer<'_> {
         self.printed_type_variable_names.clear();
         self.next_type_variable_id = 0;
 
-        match statement {
-            Definition::Function(Function {
-                publicity: Publicity::Public,
-                name: Some((_, name)),
-                documentation: doc,
-                location,
-                deprecation,
-                arguments,
-                return_type,
-                ..
-            }) => Some(DocsValues {
-                name,
-                definition: print(self.function_signature(name, arguments, return_type)),
-                documentation: markdown_documentation(doc),
-                text_documentation: text_documentation(doc),
-                source_url: source_links.url(*location),
-                deprecation_message: match deprecation {
-                    Deprecation::NotDeprecated => "".to_string(),
-                    Deprecation::Deprecated { message } => message.to_string(),
-                },
-            }),
+        let ModuleConstant {
+            publicity,
+            documentation,
+            location,
+            name,
+            type_,
+            deprecation,
+            ..
+        } = constant;
 
-            Definition::ModuleConstant(ModuleConstant {
-                publicity: Publicity::Public,
-                documentation,
-                location,
-                name,
-                type_,
-                deprecation,
-                ..
-            }) => Some(DocsValues {
-                name,
-                definition: print(self.constant(name, type_)),
-                documentation: markdown_documentation(documentation),
-                text_documentation: text_documentation(documentation),
-                source_url: source_links.url(*location),
-                deprecation_message: match deprecation {
-                    Deprecation::NotDeprecated => "".to_string(),
-                    Deprecation::Deprecated { message } => message.to_string(),
-                },
-            }),
-
-            Definition::TypeAlias(_)
-            | Definition::CustomType(_)
-            | Definition::Function(_)
-            | Definition::Import(_)
-            | Definition::ModuleConstant(_) => None,
+        match publicity {
+            Publicity::Private | Publicity::Internal { .. } => return None,
+            Publicity::Public => {}
         }
+
+        Some(DocsValues {
+            name,
+            definition: print(self.constant(name, type_)),
+            documentation: markdown_documentation(documentation),
+            text_documentation: text_documentation(documentation),
+            source_url: source_links.url(*location),
+            deprecation_message: match deprecation {
+                Deprecation::NotDeprecated => "".to_string(),
+                Deprecation::Deprecated { message } => message.to_string(),
+            },
+        })
+    }
+
+    pub fn function_value<'a>(
+        &mut self,
+        source_links: &SourceLinker,
+        function: &'a TypedFunction,
+    ) -> Option<DocsValues<'a>> {
+        // Ensure that any type variables we printed in previous definitions don't
+        // affect our printing of this definition. Two type variables in different
+        // definitions can have the same name without clashing.
+        self.printed_type_variable_names.clear();
+        self.next_type_variable_id = 0;
+
+        let Function {
+            publicity,
+            name,
+            documentation: doc,
+            location,
+            deprecation,
+            arguments,
+            return_type,
+            ..
+        } = function;
+
+        let Some((_, name)) = name else { return None };
+        match publicity {
+            Publicity::Private | Publicity::Internal { .. } => return None,
+            Publicity::Public => {}
+        }
+
+        Some(DocsValues {
+            name,
+            definition: print(self.function_signature(name, arguments, return_type)),
+            documentation: markdown_documentation(doc),
+            text_documentation: text_documentation(doc),
+            source_url: source_links.url(*location),
+            deprecation_message: match deprecation {
+                Deprecation::NotDeprecated => "".to_string(),
+                Deprecation::Deprecated { message } => message.to_string(),
+            },
+        })
     }
 
     fn custom_type<'a>(
@@ -715,6 +746,46 @@ impl Printer<'_> {
             zero_width_string(eco_format!(r#"<span title="{title}">"#)),
             zero_width_string("</span>".into()),
         )
+    }
+
+    pub(crate) fn types_definitions<'a>(
+        &mut self,
+        module: &'a TypedModule,
+        source_links: &SourceLinker,
+    ) -> Vec<TypeDefinition<'a>> {
+        let mut types = vec![];
+        for custom_type in &module.definitions.custom_types {
+            if let Some(definition) = self.custom_type_type_definition(&source_links, custom_type) {
+                types.push(definition)
+            }
+        }
+        for type_alias in &module.definitions.type_aliases {
+            if let Some(definition) = self.type_alias_type_definition(&source_links, type_alias) {
+                types.push(definition)
+            }
+        }
+        types.sort();
+        types
+    }
+
+    pub(crate) fn values_definitions<'a>(
+        &mut self,
+        module: &'a TypedModule,
+        source_links: &SourceLinker,
+    ) -> Vec<DocsValues<'a>> {
+        let mut values = vec![];
+        for constant in &module.definitions.constants {
+            if let Some(definition) = self.module_constant_value(&source_links, constant) {
+                values.push(definition)
+            }
+        }
+        for function in module.definitions.functions.iter().flatten() {
+            if let Some(definition) = self.function_value(&source_links, function) {
+                values.push(definition)
+            }
+        }
+        values.sort();
+        values
     }
 }
 

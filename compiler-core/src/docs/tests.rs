@@ -189,24 +189,8 @@ fn compile_documentation(
     );
     printer.set_options(options);
 
-    let types = module
-        .all_definitions()
-        .filter_map(
-            |definition: &crate::ast::Definition<
-                std::sync::Arc<type_::Type>,
-                crate::ast::TypedExpr,
-                EcoString,
-                EcoString,
-            >| printer.type_definition(&source_links, definition),
-        )
-        .sorted()
-        .collect_vec();
-
-    let values = module
-        .all_definitions()
-        .filter_map(|definition| printer.value(&source_links, definition))
-        .sorted()
-        .collect_vec();
+    let types = printer.types_definitions(&module, &source_links);
+    let values = printer.values_definitions(&module, &source_links);
 
     let mut output = EcoString::new();
 

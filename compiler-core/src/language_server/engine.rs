@@ -483,134 +483,121 @@ where
             };
             let line_numbers = LineNumbers::new(&module.code);
 
-            for definition in module.ast.all_definitions() {
-                match definition {
-                    // Typically, imports aren't considered document symbols.
-                    Definition::Import(_) => {}
+            for function in module.ast.definitions.functions.iter().flatten() {
+                // By default, the function's location ends right after the return type.
+                // For the full symbol range, have it end at the end of the body.
+                // Also include the documentation, if available.
+                //
+                // By convention, the symbol span starts from the leading slash in the
+                // documentation comment's marker ('///'), not from its content (of which
+                // we have the position), so we must convert the content start position
+                // to the leading slash's position using 'get_doc_marker_pos'.
+                let full_function_span = SrcSpan {
+                    start: function
+                        .documentation
+                        .as_ref()
+                        .map(|(doc_start, _)| get_doc_marker_pos(*doc_start))
+                        .unwrap_or(function.location.start),
 
-                    Definition::Function(function) => {
-                        // By default, the function's location ends right after the return type.
-                        // For the full symbol range, have it end at the end of the body.
-                        // Also include the documentation, if available.
-                        //
-                        // By convention, the symbol span starts from the leading slash in the
-                        // documentation comment's marker ('///'), not from its content (of which
-                        // we have the position), so we must convert the content start position
-                        // to the leading slash's position using 'get_doc_marker_pos'.
-                        let full_function_span = SrcSpan {
-                            start: function
-                                .documentation
-                                .as_ref()
-                                .map(|(doc_start, _)| get_doc_marker_pos(*doc_start))
-                                .unwrap_or(function.location.start),
+                    end: function.end_position,
+                };
 
-                            end: function.end_position,
-                        };
+                let (name_location, name) = function
+                    .name
+                    .as_ref()
+                    .expect("Function in a definition must be named");
 
-                        let (name_location, name) = function
-                            .name
-                            .as_ref()
-                            .expect("Function in a definition must be named");
+                // The 'deprecated' field is deprecated, but we have to specify it anyway
+                // to be able to construct the 'DocumentSymbol' type, so
+                // we suppress the warning. We specify 'None' as specifying 'Some'
+                // is what is actually deprecated.
+                #[allow(deprecated)]
+                symbols.push(DocumentSymbol {
+                    name: name.to_string(),
+                    detail: Some(
+                        Printer::new(&module.ast.names)
+                            .print_type(&get_function_type(function))
+                            .to_string(),
+                    ),
+                    kind: SymbolKind::FUNCTION,
+                    tags: make_deprecated_symbol_tag(&function.deprecation),
+                    deprecated: None,
+                    range: src_span_to_lsp_range(full_function_span, &line_numbers),
+                    selection_range: src_span_to_lsp_range(*name_location, &line_numbers),
+                    children: None,
+                });
+            }
 
-                        // The 'deprecated' field is deprecated, but we have to specify it anyway
-                        // to be able to construct the 'DocumentSymbol' type, so
-                        // we suppress the warning. We specify 'None' as specifying 'Some'
-                        // is what is actually deprecated.
-                        #[allow(deprecated)]
-                        symbols.push(DocumentSymbol {
-                            name: name.to_string(),
-                            detail: Some(
-                                Printer::new(&module.ast.names)
-                                    .print_type(&get_function_type(function))
-                                    .to_string(),
-                            ),
-                            kind: SymbolKind::FUNCTION,
-                            tags: make_deprecated_symbol_tag(&function.deprecation),
-                            deprecated: None,
-                            range: src_span_to_lsp_range(full_function_span, &line_numbers),
-                            selection_range: src_span_to_lsp_range(*name_location, &line_numbers),
-                            children: None,
-                        });
+            for alias in &module.ast.definitions.type_aliases {
+                let full_alias_span = match alias.documentation {
+                    Some((doc_position, _)) => {
+                        SrcSpan::new(get_doc_marker_pos(doc_position), alias.location.end)
                     }
+                    None => alias.location,
+                };
 
-                    Definition::TypeAlias(alias) => {
-                        let full_alias_span = match alias.documentation {
-                            Some((doc_position, _)) => {
-                                SrcSpan::new(get_doc_marker_pos(doc_position), alias.location.end)
-                            }
-                            None => alias.location,
-                        };
+                // The 'deprecated' field is deprecated, but we have to specify it anyway
+                // to be able to construct the 'DocumentSymbol' type, so
+                // we suppress the warning. We specify 'None' as specifying 'Some'
+                // is what is actually deprecated.
+                #[allow(deprecated)]
+                symbols.push(DocumentSymbol {
+                    name: alias.alias.to_string(),
+                    detail: Some(
+                        Printer::new(&module.ast.names)
+                            // If we print with aliases, we end up printing the alias which the user
+                            // is currently hovering, which is not helpful. Instead, we print the
+                            // raw type, so the user can see which type the alias represents
+                            .print_type_without_aliases(&alias.type_)
+                            .to_string(),
+                    ),
+                    kind: SymbolKind::CLASS,
+                    tags: make_deprecated_symbol_tag(&alias.deprecation),
+                    deprecated: None,
+                    range: src_span_to_lsp_range(full_alias_span, &line_numbers),
+                    selection_range: src_span_to_lsp_range(alias.name_location, &line_numbers),
+                    children: None,
+                });
+            }
 
-                        // The 'deprecated' field is deprecated, but we have to specify it anyway
-                        // to be able to construct the 'DocumentSymbol' type, so
-                        // we suppress the warning. We specify 'None' as specifying 'Some'
-                        // is what is actually deprecated.
-                        #[allow(deprecated)]
-                        symbols.push(DocumentSymbol {
-                            name: alias.alias.to_string(),
-                            detail: Some(
-                                Printer::new(&module.ast.names)
-                                    // If we print with aliases, we end up printing the alias which the user
-                                    // is currently hovering, which is not helpful. Instead, we print the
-                                    // raw type, so the user can see which type the alias represents
-                                    .print_type_without_aliases(&alias.type_)
-                                    .to_string(),
-                            ),
-                            kind: SymbolKind::CLASS,
-                            tags: make_deprecated_symbol_tag(&alias.deprecation),
-                            deprecated: None,
-                            range: src_span_to_lsp_range(full_alias_span, &line_numbers),
-                            selection_range: src_span_to_lsp_range(
-                                alias.name_location,
-                                &line_numbers,
-                            ),
-                            children: None,
-                        });
-                    }
+            for type_ in &module.ast.definitions.custom_types {
+                symbols.push(custom_type_symbol(type_, &line_numbers, module));
+            }
 
-                    Definition::CustomType(type_) => {
-                        symbols.push(custom_type_symbol(type_, &line_numbers, module));
-                    }
+            for constant in &module.ast.definitions.constants {
+                // `ModuleConstant.location` ends at the constant's name or type.
+                // For the full symbol span, necessary for `range`, we need to
+                // include the constant value as well.
+                // Also include the documentation at the start, if available.
+                let full_constant_span = SrcSpan {
+                    start: constant
+                        .documentation
+                        .as_ref()
+                        .map(|(doc_start, _)| get_doc_marker_pos(*doc_start))
+                        .unwrap_or(constant.location.start),
 
-                    Definition::ModuleConstant(constant) => {
-                        // `ModuleConstant.location` ends at the constant's name or type.
-                        // For the full symbol span, necessary for `range`, we need to
-                        // include the constant value as well.
-                        // Also include the documentation at the start, if available.
-                        let full_constant_span = SrcSpan {
-                            start: constant
-                                .documentation
-                                .as_ref()
-                                .map(|(doc_start, _)| get_doc_marker_pos(*doc_start))
-                                .unwrap_or(constant.location.start),
+                    end: constant.value.location().end,
+                };
 
-                            end: constant.value.location().end,
-                        };
-
-                        // The 'deprecated' field is deprecated, but we have to specify it anyway
-                        // to be able to construct the 'DocumentSymbol' type, so
-                        // we suppress the warning. We specify 'None' as specifying 'Some'
-                        // is what is actually deprecated.
-                        #[allow(deprecated)]
-                        symbols.push(DocumentSymbol {
-                            name: constant.name.to_string(),
-                            detail: Some(
-                                Printer::new(&module.ast.names)
-                                    .print_type(&constant.type_)
-                                    .to_string(),
-                            ),
-                            kind: SymbolKind::CONSTANT,
-                            tags: make_deprecated_symbol_tag(&constant.deprecation),
-                            deprecated: None,
-                            range: src_span_to_lsp_range(full_constant_span, &line_numbers),
-                            selection_range: src_span_to_lsp_range(
-                                constant.name_location,
-                                &line_numbers,
-                            ),
-                            children: None,
-                        });
-                    }
-                }
+                // The 'deprecated' field is deprecated, but we have to specify it anyway
+                // to be able to construct the 'DocumentSymbol' type, so
+                // we suppress the warning. We specify 'None' as specifying 'Some'
+                // is what is actually deprecated.
+                #[allow(deprecated)]
+                symbols.push(DocumentSymbol {
+                    name: constant.name.to_string(),
+                    detail: Some(
+                        Printer::new(&module.ast.names)
+                            .print_type(&constant.type_)
+                            .to_string(),
+                    ),
+                    kind: SymbolKind::CONSTANT,
+                    tags: make_deprecated_symbol_tag(&constant.deprecation),
+                    deprecated: None,
+                    range: src_span_to_lsp_range(full_constant_span, &line_numbers),
+                    selection_range: src_span_to_lsp_range(constant.name_location, &line_numbers),
+                    children: None,
+                });
             }
 
             Ok(symbols)
@@ -1613,16 +1600,13 @@ fn get_hexdocs_link_section(
     ast: &TypedModule,
     hex_deps: &HashSet<EcoString>,
 ) -> Option<String> {
-    let package_name = ast
-        .all_definitions()
-        .find_map(|definition| match definition {
-            Definition::Import(import)
-                if import.module == module_name && hex_deps.contains(&import.package) =>
-            {
-                Some(&import.package)
-            }
-            _ => None,
-        })?;
+    let package_name = ast.definitions.imports.iter().find_map(|import| {
+        if import.module == module_name && hex_deps.contains(&import.package) {
+            Some(&import.package)
+        } else {
+            None
+        }
+    })?;
 
     Some(format_hexdocs_link_section(
         package_name,

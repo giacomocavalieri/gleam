@@ -212,19 +212,8 @@ pub fn generate_html<IO: FileSystemReader>(
             &dependencies,
         );
 
-        let types: Vec<TypeDefinition<'_>> = module
-            .ast
-            .all_definitions()
-            .filter_map(|definition| printer.type_definition(&source_links, definition))
-            .sorted()
-            .collect();
-
-        let values: Vec<DocsValues<'_>> = module
-            .ast
-            .all_definitions()
-            .filter_map(|definition| printer.value(&source_links, definition))
-            .sorted()
-            .collect();
+        let types = printer.types_definitions(&module.ast, &source_links);
+        let values = printer.values_definitions(&module.ast, &source_links);
 
         types.iter().for_each(|type_| {
             let constructors = type_
