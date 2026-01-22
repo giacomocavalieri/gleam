@@ -26,6 +26,10 @@
   friendlier.
   ([Ameen Radwan](https://github.com/Acepie))
 
+- When attempting to publish a package on Hex with an already taken name,
+  the message is clearer.
+  ([vyacheslavhere](https://github.com/vyacheslavhere))
+
 - The `gleam.toml` format is now consistent. The two sausage-case fields
   (`dev-dependencies` and `tag-prefix`) have been replaced by snake_case
   versions. Files using the old names will continue to work.
