@@ -4,6 +4,11 @@
 
 ### Compiler
 
+- The compiler now reports all errors and warnings it can find in modules that
+  do not depend on each other, while previously it would always stop at the
+  first module with an error.
+  ([Giacomo Cavalieri](https://github.com/giacomocavalieri))
+
 - The compiler now supports list prepending in constants. For example:
 
   ```gleam
@@ -61,6 +66,7 @@
   This looks like ascii comma, but it is actually the unicode low single
   comma quotation mark.
   ```
+
   ([Louis Pilfold](https://github.com/lpil))
 
 - The compiler now emits more efficient code when matching on single-character
@@ -112,7 +118,7 @@
   dependencies every single time it is run.
   ([Giacomo Cavalieri](https://github.com/giacomocavalieri))
 
-- The build tool will now suggest to create a module in dev` or `test`
+- The build tool will now suggest to create a module in dev`or`test`
   directory, if that missing module is a dev module or a test module
   respectively.
   ([Andrey Kozhev](https://github.com/ankddev))
