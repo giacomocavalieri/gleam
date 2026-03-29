@@ -61,6 +61,7 @@
   This looks like ascii comma, but it is actually the unicode low single
   comma quotation mark.
   ```
+
   ([Louis Pilfold](https://github.com/lpil))
 
 - The compiler now emits more efficient code when matching on single-character
@@ -112,7 +113,7 @@
   dependencies every single time it is run.
   ([Giacomo Cavalieri](https://github.com/giacomocavalieri))
 
-- The build tool will now suggest to create a module in dev` or `test`
+- The build tool will now suggest to create a module in the `dev` or `test`
   directory, if that missing module is a dev module or a test module
   respectively.
   ([Andrey Kozhev](https://github.com/ankddev))
@@ -226,4 +227,8 @@
 
 - Fixed a bug where the "Add missing type parameter" code action could be
   triggered on types that do not exist instead of type variables.
+  ([Giacomo Cavalieri](https://github.com/giacomocavalieri))
+
+- Fixed a bug where some functions could be formatted to be longer than 80
+  characters.
   ([Giacomo Cavalieri](https://github.com/giacomocavalieri))
