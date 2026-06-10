@@ -514,7 +514,7 @@ impl<'a> TypeScriptGenerator<'a> {
             type_parameters,
         );
         let variant_check_definition =
-            self.variant_check_definition(constructor, type_name, type_parameters);
+            self.variant_check_definitions(constructor, type_name, type_parameters);
         let fields_definition = self.variant_fields_definition(
             constructor,
             type_name,
@@ -652,7 +652,7 @@ impl<'a> TypeScriptGenerator<'a> {
         .group()
     }
 
-    fn variant_check_definition(
+    fn variant_check_definitions(
         &self,
         constructor: &'a TypedRecordConstructor,
         type_name: &'a str,
@@ -663,9 +663,10 @@ impl<'a> TypeScriptGenerator<'a> {
             variant_name = constructor.name
         )
         .to_doc();
-        let mut document = docvec![
+
+        let mut check_with_any = docvec![
             "export function ",
-            name_with_generics(function_name, type_parameters),
+            name_with_generics(function_name.clone(), type_parameters),
             "(",
             docvec![break_("", "",), "value: any"].nest(INDENT),
             break_(",", ""),
@@ -676,15 +677,33 @@ impl<'a> TypeScriptGenerator<'a> {
         if !type_parameters.is_empty() {
             for i in 0..type_parameters.len() {
                 if i == 0 {
-                    document = document.append("<unknown");
+                    check_with_any = check_with_any.append("<unknown");
                 } else {
-                    document = document.append(", unknown");
+                    check_with_any = check_with_any.append(", unknown");
                 }
             }
-            document = document.append('>');
+            check_with_any = check_with_any.append('>');
         };
-        document = document.append(';');
-        document.group()
+        check_with_any = check_with_any.append(';').group();
+
+        let check_with_type = docvec![
+            "export function ",
+            name_with_generics(function_name, type_parameters),
+            "(",
+            docvec![
+                break_("", ""),
+                "value: ",
+                name_with_generics(type_name.to_doc(), type_parameters),
+            ]
+            .nest(INDENT),
+            break_(",", ""),
+            "): value is ",
+            name_with_generics(constructor.name.clone().to_doc(), type_parameters),
+            ";"
+        ]
+        .group();
+
+        docvec![check_with_any, line(), check_with_type]
     }
 
     fn variant_fields_definition(

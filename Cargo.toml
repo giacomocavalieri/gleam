@@ -16,6 +16,7 @@ members = [
   "test-project-compiler",
   "hexpm",
   "erlang-term-format",
+  "erlang-abstract-format",
 ]
 
 # common dependencies
