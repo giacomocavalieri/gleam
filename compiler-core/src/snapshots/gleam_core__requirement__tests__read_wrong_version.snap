@@ -6,4 +6,7 @@ TOML parse error at line 2, column 21
   |
 2 |             short = ">= 2.0 and < 3.0.0"
   |                     ^^^^^^^^^^^^^^^^^^^^
->= 2.0 and < 3.0.0 is not a valid version. missing patch version: 2.0
+I was unable to parse the version ">= 2.0 and < 3.0.0".
+The error from the parser was:
+
+missing patch version: 2.0

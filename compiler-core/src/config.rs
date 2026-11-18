@@ -6,7 +6,7 @@ use crate::error::{self, FileIoAction, FileIoCause, FileKind, did_you_mean};
 use crate::io::FileSystemReader;
 use crate::io::ordered_map;
 use crate::manifest::Manifest;
-use crate::requirement::Requirement;
+use crate::requirement::{InvalidVersionFormat, Requirement};
 use crate::version::COMPILER_VERSION;
 use crate::{Error, Result};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -145,8 +145,10 @@ impl GleamVersion {
     pub fn new(spec: String) -> Result<GleamVersion> {
         let hex =
             version::Range::new(spec.to_string()).map_err(|error| Error::InvalidVersionFormat {
-                input: spec,
-                error: error.to_string(),
+                error: InvalidVersionFormat {
+                    input: spec,
+                    error: error.to_string(),
+                },
             })?;
         Ok(hex.into())
     }

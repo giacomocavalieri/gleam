@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2023 The Gleam contributors
 
-use std::fmt;
+use std::fmt::{self, Display};
 use std::str::FromStr;
 
-use crate::Error;
-use crate::error::Result;
 use crate::io::make_relative;
 use camino::{Utf8Path, Utf8PathBuf};
 use ecow::EcoString;
@@ -35,14 +33,32 @@ pub enum Requirement {
     },
 }
 
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct InvalidVersionFormat {
+    pub input: String,
+    pub error: String,
+}
+
+impl Display for InvalidVersionFormat {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("I was unable to parse the version \"")?;
+        formatter.write_str(&self.input)?;
+        formatter.write_str(
+            "\".
+The error from the parser was:
+
+",
+        )?;
+        formatter.write_str(&self.error)
+    }
+}
+
 impl Requirement {
-    pub fn hex(range: &str) -> Result<Requirement> {
+    pub fn hex(range: &str) -> Result<Requirement, InvalidVersionFormat> {
         Ok(Requirement::Hex {
-            version: Range::new(range.to_string()).map_err(|error| {
-                Error::InvalidVersionFormat {
-                    input: range.to_string(),
-                    error: error.to_string(),
-                }
+            version: Range::new(range.to_string()).map_err(|error| InvalidVersionFormat {
+                input: range.to_string(),
+                error: error.to_string(),
             })?,
         })
     }
@@ -134,9 +150,9 @@ where
 pub struct Void;
 
 impl FromStr for Requirement {
-    type Err = Error;
+    type Err = InvalidVersionFormat;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> Result<Self, InvalidVersionFormat> {
         Requirement::hex(s)
     }
 }

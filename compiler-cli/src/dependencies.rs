@@ -25,7 +25,7 @@ use gleam_core::{
     io::{HttpClient as _, TarUnpacker, WrappedReader},
     manifest::{Base16Checksum, Manifest, ManifestPackage, ManifestPackageSource, PackageChanges},
     paths::ProjectPaths,
-    requirement::Requirement,
+    requirement::{InvalidVersionFormat, Requirement},
 };
 use hexpm::version::Version;
 use itertools::Itertools;
@@ -361,7 +361,9 @@ fn remove_extra_requirements(config: &PackageConfig, manifest: &mut Manifest) ->
     Ok(())
 }
 
-pub fn parse_gleam_add_specifier(package: &str) -> Result<(EcoString, Requirement)> {
+pub fn parse_gleam_add_specifier(
+    package: &str,
+) -> Result<(EcoString, Requirement), InvalidVersionFormat> {
     let Some((package, version)) = package.split_once('@') else {
         // Default to the latest version available.
         return Ok((
@@ -374,7 +376,7 @@ pub fn parse_gleam_add_specifier(package: &str) -> Result<(EcoString, Requiremen
     let parts = version.split('.').collect::<Vec<_>>();
     let major = match parts.first() {
         Some(major) => Ok(major),
-        None => Err(Error::InvalidVersionFormat {
+        None => Err(InvalidVersionFormat {
             input: package.to_string(),
             error: "Failed to parse semantic major version".to_string(),
         }),
@@ -387,7 +389,7 @@ pub fn parse_gleam_add_specifier(package: &str) -> Result<(EcoString, Requiremen
     // Using the major version specifier, calculate the maximum
     // allowable version (i.e., the next major version).
     let Ok(num) = major.parse::<usize>() else {
-        return Err(Error::InvalidVersionFormat {
+        return Err(InvalidVersionFormat {
             input: version.to_string(),
             error: "Failed to parse semantic major version as integer".to_string(),
         });
@@ -403,7 +405,7 @@ pub fn parse_gleam_add_specifier(package: &str) -> Result<(EcoString, Requiremen
         }
         3 => Requirement::hex(version),
         n => {
-            return Err(Error::InvalidVersionFormat {
+            return Err(InvalidVersionFormat {
                 input: version.to_string(),
                 error: format!(
                     "Expected up to 3 numbers in version specifier (MAJOR.MINOR.PATCH), found {n}"

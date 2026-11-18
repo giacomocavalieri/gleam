@@ -10,6 +10,7 @@ use crate::derivation_tree::DerivationTreePrinter;
 use crate::diagnostic::{Diagnostic, ExtraLabel, Label, Location};
 
 use crate::parse::error::ParseErrorDetails;
+use crate::requirement;
 use crate::strings::{to_snake_case, to_upper_camel_case};
 use crate::type_::collapse_links;
 use crate::type_::error::{
@@ -33,7 +34,6 @@ use std::io::Write as IoWrite;
 use std::path::PathBuf;
 use std::sync::Arc;
 use termcolor::Buffer;
-use thiserror::Error;
 use vec1::Vec1;
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -78,8 +78,7 @@ pub struct DefinedModuleOrigin {
 }
 
 /// A module for which type checking failed.
-#[derive(Debug, Eq, PartialEq, Error, Clone)]
-#[error("type checking failed")]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct FailedModule {
     pub path: Utf8PathBuf,
     pub src: EcoString,
@@ -87,8 +86,7 @@ pub struct FailedModule {
     pub names: Box<Names>,
 }
 
-#[derive(Debug, Eq, PartialEq, Error, Clone)]
-#[error("module couldn't be analysed")]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct SkippedModule {
     pub path: Utf8PathBuf,
     pub code: EcoString,
@@ -126,16 +124,14 @@ impl SkipReason {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Error, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Error {
-    #[error("failed to parse Gleam source code")]
     Parse {
         path: Utf8PathBuf,
         src: EcoString,
         error: Box<crate::parse::error::ParseError>,
     },
 
-    #[error("type checking failed")]
     Type {
         /// All the modules that were skipped because they depend (directly or
         /// indirectly) on some other module that has an error.
@@ -145,46 +141,42 @@ pub enum Error {
         failed_modules: HashMap<EcoString, FailedModule>,
     },
 
-    #[error("unknown import {import}")]
     UnknownImport {
         import: EcoString,
         // Boxed to prevent this variant from being overly large
         details: Box<UnknownImportDetails>,
     },
 
-    #[error("duplicate module {module}")]
     DuplicateModule {
         module: Name,
         first: DefinedModuleOrigin,
         second: DefinedModuleOrigin,
     },
 
-    #[error("duplicate source file {file}")]
-    DuplicateSourceFile { file: String },
+    DuplicateSourceFile {
+        file: String,
+    },
 
-    #[error("duplicate native Erlang module {module}")]
     DuplicateNativeErlangModule {
         module: Name,
         first: Utf8PathBuf,
         second: Utf8PathBuf,
     },
 
-    #[error("gleam module {module} clashes with native file of same name")]
     ClashingGleamModuleAndNativeFileName {
         module: Name,
         gleam_file: Utf8PathBuf,
         native_file: Utf8PathBuf,
     },
 
-    #[error("cyclical module imports")]
     ImportCycle {
         modules: Vec1<(EcoString, ImportCycleLocationDetails)>,
     },
 
-    #[error("cyclical package dependencies")]
-    PackageCycle { packages: Vec<EcoString> },
+    PackageCycle {
+        packages: Vec<EcoString>,
+    },
 
-    #[error("{action:?} {path:?} failed: {cause:?}")]
     FileIo {
         kind: FileKind,
         action: FileIoAction,
@@ -192,278 +184,296 @@ pub enum Error {
         cause: FileIoCause,
     },
 
-    #[error("Non Utf-8 Path: {path}")]
-    NonUtf8Path { path: PathBuf },
+    NonUtf8Path {
+        path: PathBuf,
+    },
 
-    #[error("{error}")]
-    GitInitialization { error: String },
+    GitInitialization {
+        error: String,
+    },
 
-    #[error("Failed to send LSP message: {error}")]
-    LspMessageSendFailed { error: String },
+    LspMessageSendFailed {
+        error: String,
+    },
 
-    #[error("Failed to receive LSP message: {error}")]
-    LspMessageReceiveFailed { error: String },
+    LspMessageReceiveFailed {
+        error: String,
+    },
 
-    #[error("io operation failed")]
     StandardIo {
         action: StandardIoAction,
         err: Option<std::io::ErrorKind>,
     },
 
-    #[error("source code incorrectly formatted")]
-    Format { problem_files: Vec<Unformatted> },
+    Format {
+        problem_files: Vec<Unformatted>,
+    },
 
-    #[error("Hex error: {0}")]
     Hex(String),
 
-    #[error("{error}")]
-    ExpandTar { error: String },
+    ExpandTar {
+        error: String,
+    },
 
-    #[error("{err}")]
-    AddTar { path: Utf8PathBuf, err: String },
+    AddTar {
+        path: Utf8PathBuf,
+        err: String,
+    },
 
-    #[error("{0}")]
     TarFinish(String),
 
-    #[error("{error}")]
-    ZipAdd { path: String, error: String },
+    ZipAdd {
+        path: String,
+        error: String,
+    },
 
-    #[error("{0}")]
     ZipFinish(String),
 
-    #[error("{0}")]
     Gzip(String),
 
-    #[error("shell program `{program}` not found")]
-    ShellProgramNotFound { program: String, os: OS },
+    ShellProgramNotFound {
+        program: String,
+        os: OS,
+    },
 
-    #[error("shell program `{program}` failed")]
     ShellCommand {
         program: String,
         reason: ShellCommandFailureReason,
     },
 
-    #[error("{name} is not a valid project name")]
     InvalidProjectName {
         name: String,
         reason: InvalidProjectNameReason,
     },
 
-    #[error("{module} is not a valid module name")]
-    InvalidModuleName { module: String },
+    InvalidModuleName {
+        module: String,
+    },
 
-    #[error("{module} is not module")]
     ModuleDoesNotExist {
         module: EcoString,
         suggestion: Option<EcoString>,
     },
 
-    #[error("{module} does not have a main function")]
-    ModuleDoesNotHaveMainFunction { module: EcoString, origin: Origin },
+    ModuleDoesNotHaveMainFunction {
+        module: EcoString,
+        origin: Origin,
+    },
 
-    #[error("{module} does not have a public main function")]
-    MainFunctionIsPrivate { module: EcoString },
+    MainFunctionIsPrivate {
+        module: EcoString,
+    },
 
-    #[error("{module}'s main function has the wrong arity so it can not be run")]
-    MainFunctionHasWrongArity { module: EcoString, arity: usize },
+    MainFunctionHasWrongArity {
+        module: EcoString,
+        arity: usize,
+    },
 
-    #[error("{module}'s main function does not support the current target")]
-    MainFunctionDoesNotSupportTarget { module: EcoString, target: Target },
+    MainFunctionDoesNotSupportTarget {
+        module: EcoString,
+        target: Target,
+    },
 
-    #[error("{input} is not a valid version. {error}")]
-    InvalidVersionFormat { input: String, error: String },
+    InvalidVersionFormat {
+        error: requirement::InvalidVersionFormat,
+    },
 
-    #[error("incompatible locked version. {error}")]
-    IncompatibleLockedVersion { error: String },
+    IncompatibleLockedVersion {
+        error: String,
+    },
 
-    #[error("project root already exists")]
-    ProjectRootAlreadyExist { path: String },
+    ProjectRootAlreadyExist {
+        path: String,
+    },
 
-    #[error("File(s) already exist in {}",
-file_names.iter().map(|x| x.as_str()).join(", "))]
-    OutputFilesAlreadyExist { file_names: Vec<Utf8PathBuf> },
+    OutputFilesAlreadyExist {
+        file_names: Vec<Utf8PathBuf>,
+    },
 
-    #[error("Invalid package names: {}", packages.iter().join(", "))]
     RemovedPackageNamesInvalid {
         packages: Vec<String>,
         dependencies: Vec<EcoString>,
     },
 
-    #[error("Packages not exist: {}", packages.iter().join(", "))]
-    RemovedPackagesNotExist { packages: Vec<String> },
+    RemovedPackagesNotExist {
+        packages: Vec<String>,
+    },
 
-    #[error("Packages to update not exist: {}", packages.iter().join(", "))]
-    PackagesToUpdateNotExist { packages: Vec<EcoString> },
+    PackagesToUpdateNotExist {
+        packages: Vec<EcoString>,
+    },
 
-    #[error("unable to find project root")]
-    UnableToFindProjectRoot { path: String },
+    UnableToFindProjectRoot {
+        path: String,
+    },
 
-    #[error("gleam.toml version {toml_ver} does not match .app version {app_ver}")]
-    VersionDoesNotMatch { toml_ver: String, app_ver: String },
+    VersionDoesNotMatch {
+        toml_ver: String,
+        app_ver: String,
+    },
 
-    #[error("warnings are not permitted")]
-    ForbiddenWarnings { count: usize },
+    ForbiddenWarnings {
+        count: usize,
+    },
 
-    #[error("Invalid runtime for target {target:?}: {invalid_runtime:?}")]
     InvalidRuntime {
         target: Target,
         invalid_runtime: Runtime,
     },
 
-    #[error("package downloading failed: {error}")]
     DownloadPackageError {
         package_name: String,
         package_version: String,
         error: String,
     },
 
-    #[error("{0}")]
     Http(String),
 
-    #[error("Failed to create canonical path for package {0}")]
     DependencyCanonicalizationFailed(String),
 
-    #[error("Could not find versions that satisfy dependency requirements")]
     DependencyResolutionNoSolution {
         root_package_name: EcoString,
         derivation_tree: Box<NeverEqual<ResolutionFailure>>,
     },
 
-    #[error("Dependency resolution failed: {0}")]
     DependencyResolutionError(String),
 
-    #[error("The package {0} is listed in dependencies and dev_dependencies")]
     DuplicateDependency(EcoString),
 
-    #[error("Expected package {expected} at path {path} but found {found} instead")]
     WrongDependencyProvided {
         path: Utf8PathBuf,
         expected: String,
         found: String,
     },
 
-    #[error("The package {package} is provided multiple times, as {source_1} and {source_2}")]
     ProvidedDependencyConflict {
         package: String,
         source_1: String,
         source_2: String,
     },
 
-    #[error("The path {path} does not exist in the git repository {repo} for package {package}")]
     GitDependencyPathNotFound {
         package: String,
         path: String,
         repo: String,
     },
 
-    #[error("The package was missing required fields for publishing")]
     MissingHexPublishFields {
         description_missing: bool,
         licence_missing: bool,
     },
 
-    #[error("Dependency {package:?} has not been published to Hex")]
-    PublishNonHexDependencies { package: String },
+    PublishNonHexDependencies {
+        package: String,
+    },
 
-    #[error("The package {package} uses unsupported build tools {build_tools:?}")]
     UnsupportedBuildTool {
         package: String,
         build_tools: Vec<EcoString>,
     },
 
-    #[error("Opening docs at {path} failed: {error}")]
-    FailedToOpenDocs { path: Utf8PathBuf, error: String },
+    FailedToOpenDocs {
+        path: Utf8PathBuf,
+        error: String,
+    },
 
-    #[error(
-        "The package {package} requires a Gleam version satisfying \
-{required_version} and you are using v{gleam_version}"
-    )]
     IncompatibleCompilerVersion {
         package: String,
         required_version: String,
         gleam_version: String,
     },
 
-    #[error("The --javascript-prelude flag must be given when compiling to JavaScript")]
     JavaScriptPreludeRequired,
 
-    #[error("The modules {unfinished:?} contain todo expressions and so cannot be published")]
-    CannotPublishTodo { unfinished: Vec<EcoString> },
+    CannotPublishTodo {
+        unfinished: Vec<EcoString>,
+    },
 
-    #[error("The modules {unfinished:?} contain todo expressions and so cannot be published")]
-    CannotPublishEcho { unfinished: Vec<EcoString> },
+    CannotPublishEcho {
+        unfinished: Vec<EcoString>,
+    },
 
-    #[error(
-        "The modules {unfinished:?} contain internal types in their public API so cannot be published"
-    )]
-    CannotPublishLeakedInternalType { unfinished: Vec<EcoString> },
+    CannotPublishLeakedInternalType {
+        unfinished: Vec<EcoString>,
+    },
 
-    #[error("The modules {unfinished:?} are empty and so cannot be published")]
-    CannotPublishEmptyModules { unfinished: Vec<EcoString> },
+    CannotPublishEmptyModules {
+        unfinished: Vec<EcoString>,
+    },
 
-    #[error("Publishing packages with an invalid README is not permitted")]
-    CannotPublishWithInvalidReadme { reason: InvalidReadmeReason },
+    CannotPublishWithInvalidReadme {
+        reason: InvalidReadmeReason,
+    },
 
-    #[error("Publishing packages to reserve names is not permitted")]
     HexPackageSquatting,
 
-    #[error("The package includes the default main function so cannot be published")]
-    CannotPublishWithDefaultMain { package_name: EcoString },
+    CannotPublishWithDefaultMain {
+        package_name: EcoString,
+    },
 
-    #[error("Corrupt manifest.toml")]
     CorruptManifest,
 
-    #[error("The Gleam module {path} would overwrite the Erlang module {name}")]
-    GleamModuleWouldOverwriteStandardErlangModule { name: EcoString, path: Utf8PathBuf },
+    GleamModuleWouldOverwriteStandardErlangModule {
+        name: EcoString,
+        path: Utf8PathBuf,
+    },
 
-    #[error("Version already published")]
-    HexPublishReplaceRequired { version: String },
+    HexPublishReplaceRequired {
+        version: String,
+    },
 
-    #[error("Insufficient permissions to publish {name} {version}")]
-    HexPublishAccessDenied { name: String, version: String },
+    HexPublishAccessDenied {
+        name: String,
+        version: String,
+    },
 
-    #[error("The gleam version constraint is wrong and so cannot be published")]
     CannotPublishWrongVersion {
         minimum_required_version: SmallVersion,
         wrongfully_allowed_version: SmallVersion,
     },
 
-    #[error("Failed to encrypt local Hex API key")]
-    FailedToEncryptLocalHexApiKey { detail: String },
+    FailedToEncryptLocalHexApiKey {
+        detail: String,
+    },
 
-    #[error("Failed to decrypt local Hex API key")]
     FailedToDecryptLocalHexApiKey,
 
-    #[error("Cannot add a package with the same name as a dependency")]
-    CannotAddSelfAsDependency { name: EcoString },
+    CannotAddSelfAsDependency {
+        name: EcoString,
+    },
 
-    #[error("Hex session revoked")]
     HexSessionRevoked,
 
-    #[error("Incorrect Hex one-time-password")]
     IncorrectHexOneTimePassword,
 
-    #[error("{path} could not be added to the tarball as it is outside the project root")]
-    TarPathOutsideOfProjectRoot { path: Utf8PathBuf },
+    TarPathOutsideOfProjectRoot {
+        path: Utf8PathBuf,
+    },
 
-    #[error("could not create temp file: {error}")]
-    CouldNotCreateTempFile { error: String },
+    CouldNotCreateTempFile {
+        error: String,
+    },
 
     /// This happens when we try adding some packages as regular dependencies
     /// (gleam add wibble wobble ...) but those are already listed in the dev
     /// dependencies of the project!
-    #[error("these packages are already dev dependencies: {packages:?}")]
-    AddedDependenciesAreAlreadyDevDependencies { packages: Vec<EcoString> },
+    AddedDependenciesAreAlreadyDevDependencies {
+        packages: Vec<EcoString>,
+    },
 
     /// This happens when we try adding some packages as dev dependencies
     /// (gleam add wibble wobble ... --dev) but those are already listed in the
     /// dependencies of the project!
-    #[error("these packages are already dependencies: {packages:?}")]
-    AddedDevDependenciesAreAlreadyDependencies { packages: Vec<EcoString> },
+    AddedDevDependenciesAreAlreadyDependencies {
+        packages: Vec<EcoString>,
+    },
 
-    #[error("the documentation page {path} is outside the package directory")]
-    DocumentationPageOutsidePackage { path: Utf8PathBuf },
+    DocumentationPageOutsidePackage {
+        path: Utf8PathBuf,
+    },
 }
+
+impl std::error::Error for Error {}
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub enum InvalidReadmeReason {
@@ -1020,6 +1030,12 @@ fn to_ordinal(value: u32) -> String {
         2 => format!("{value}nd"),
         3 => format!("{value}rd"),
         _ => format!("{value}th"),
+    }
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.pretty_string())
     }
 }
 
@@ -2321,16 +2337,10 @@ The error from the HTTP client was:
                 }]
             }
 
-            Error::InvalidVersionFormat { input, error } => {
-                let text = format!(
-                    "I was unable to parse the version \"{input}\".
-The error from the parser was:
-
-    {error}"
-                );
+            Error::InvalidVersionFormat { error } => {
                 vec![Diagnostic {
                     title: "Invalid version format".into(),
-                    text,
+                    text: format!("{error}"),
                     hint: None,
                     location: None,
                     level: Level::Error,
